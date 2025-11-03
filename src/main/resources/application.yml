@@ -1,0 +1,8 @@
+server:
+  port: 8081
+
+keycloak:
+  realm: dev-realm
+  token-endpoint-base: "http://localhost:8080/realms/dev-realm"
+  client-id: "dev-client"
+  client-secret: "IDngpgnmdRuwthiFqcjeE9QKSF6o20HV"
