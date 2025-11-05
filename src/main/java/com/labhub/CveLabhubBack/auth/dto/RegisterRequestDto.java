@@ -1,4 +1,4 @@
-package com.labhub.CveLabhubBack.dto;
+package com.labhub.CveLabhubBack.auth.dto;
 
 import lombok.Getter;
 import lombok.Setter;

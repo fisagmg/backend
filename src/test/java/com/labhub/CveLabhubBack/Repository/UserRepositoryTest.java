@@ -1,7 +1,8 @@
 package com.labhub.CveLabhubBack.Repository;
 
-import com.labhub.CveLabhubBack.entity.UserEntity;
-import com.labhub.CveLabhubBack.entity.UserRole;
+import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
+import com.labhub.CveLabhubBack.auth.entity.UserEntity;
+import com.labhub.CveLabhubBack.auth.entity.UserRole;
 import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

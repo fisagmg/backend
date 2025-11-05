@@ -1,4 +1,4 @@
-package com.labhub.CveLabhubBack.config;
+package com.labhub.CveLabhubBack.auth.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

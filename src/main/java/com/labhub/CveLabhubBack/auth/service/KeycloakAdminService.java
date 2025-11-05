@@ -1,4 +1,4 @@
-package com.labhub.CveLabhubBack.service;
+package com.labhub.CveLabhubBack.auth.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

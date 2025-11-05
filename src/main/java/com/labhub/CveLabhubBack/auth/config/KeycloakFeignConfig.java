@@ -1,4 +1,4 @@
-package com.labhub.CveLabhubBack.config;
+package com.labhub.CveLabhubBack.auth.config;
 
 import feign.Logger;
 import feign.codec.Encoder;
