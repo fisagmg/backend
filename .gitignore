@@ -1,0 +1,28 @@
+### IntelliJ ###
+.idea/
+*.iml
+out/
+
+### Gradle ###
+.gradle/
+build/
+
+### Logs ###
+*.log
+*.csv
+
+### OS ###
+.DS_Store
+
+### Environment files ###
+.env
+application.yml
+application.properties
+
+### Others ###
+*.class
+*.jar
+*.war
+*.zip
+*.tar
+*.gz
