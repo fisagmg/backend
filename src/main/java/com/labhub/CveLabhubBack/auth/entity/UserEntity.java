@@ -1,4 +1,4 @@
-package com.labhub.CveLabhubBack.entity;
+package com.labhub.CveLabhubBack.auth.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;

@@ -1,6 +1,6 @@
-package com.labhub.CveLabhubBack.Repository;
+package com.labhub.CveLabhubBack.auth.Repository;
 
-import com.labhub.CveLabhubBack.entity.UserEntity;
+import com.labhub.CveLabhubBack.auth.entity.UserEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

@@ -1,4 +1,4 @@
-package com.labhub.CveLabhubBack.entity;
+package com.labhub.CveLabhubBack.auth.entity;
 
 public enum UserRole {
     USER,

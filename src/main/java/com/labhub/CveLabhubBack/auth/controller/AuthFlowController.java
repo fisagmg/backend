@@ -1,9 +1,9 @@
-package com.labhub.CveLabhubBack.controller;
+package com.labhub.CveLabhubBack.auth.controller;
 
-import com.labhub.CveLabhubBack.dto.LoginRequestDto;
-import com.labhub.CveLabhubBack.dto.RegisterRequestDto;
-import com.labhub.CveLabhubBack.service.AuthFlowService;
-import com.labhub.CveLabhubBack.service.KeycloakAdminService;
+import com.labhub.CveLabhubBack.auth.dto.LoginRequestDto;
+import com.labhub.CveLabhubBack.auth.dto.RegisterRequestDto;
+import com.labhub.CveLabhubBack.auth.service.AuthFlowService;
+import com.labhub.CveLabhubBack.auth.service.KeycloakAdminService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;

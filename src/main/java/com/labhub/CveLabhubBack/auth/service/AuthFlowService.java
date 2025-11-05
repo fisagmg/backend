@@ -33,7 +33,7 @@
 //}
 
 
-package com.labhub.CveLabhubBack.service;
+package com.labhub.CveLabhubBack.auth.service;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
