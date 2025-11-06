@@ -47,6 +47,7 @@ dependencies {
     implementation 'software.amazon.awssdk:sts'
 
 
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
 }
 
 dependencyManagement {
