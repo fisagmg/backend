@@ -30,7 +30,7 @@ class DbConnectionTest {
     void testUserTableList() {
         // users 테이블 존재 여부 확인 (존재하지 않으면 예외 발생)
         try {
-            List<Map<String, Object>> users = jdbcTemplate.queryForList("SELECT * FROM person");
+            List<Map<String, Object>> users = jdbcTemplate.queryForList("SELECT * FROM users");
 
             System.out.println("✅ 현재 DB 유저 목록 (" + users.size() + "명):");
             for (Map<String, Object> row : users) {

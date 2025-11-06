@@ -9,12 +9,10 @@ import org.springframework.cloud.openfeign.support.SpringEncoder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * Feign이 form-urlencoded 형식으로 데이터를 보낼 수 있도록 설정하는 Config 클래스
- */
 @Configuration
 public class KeycloakFeignConfig {
 
+    // Spring MVC의 HTTP 메시지 컨버터 묶음(= JSON, Form 등 직렬화/역직렬화 규칙들)
     private final ObjectFactory<HttpMessageConverters> messageConverters;
 
     public KeycloakFeignConfig(ObjectFactory<HttpMessageConverters> messageConverters) {
