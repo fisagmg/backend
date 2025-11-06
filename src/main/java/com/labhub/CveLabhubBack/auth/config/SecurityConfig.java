@@ -46,6 +46,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers("/actuator/health", "/public/**").permitAll()
 
+                        // ✅ Report API 테스트용 임시 허용 (개발 후 삭제할 것!)
+                        .requestMatchers("/api/reports/**").permitAll()
+
                         // (원하면 Swagger도 허용)
                         //.requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
 

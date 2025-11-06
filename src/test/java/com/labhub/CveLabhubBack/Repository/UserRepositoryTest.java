@@ -8,10 +8,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.test.annotation.Rollback;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 @DataJpaTest // ✅ JPA 전용 테스트 (DB 연결 포함)
+@ActiveProfiles("test")
 @Transactional
 @Rollback(false) // ⚠️ false로 하면 실제 DB에 반영됨 (테스트용)
 class UserRepositoryTest {
