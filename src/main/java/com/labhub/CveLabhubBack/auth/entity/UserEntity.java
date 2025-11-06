@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Entity // DB 테이블과 매핑됨
-@Table(name = "user",
+@Table(name = "users",
         indexes = {
                 @Index(name="idx_users_email", columnList = "email")
         },

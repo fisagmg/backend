@@ -16,50 +16,40 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
-//    // (옵션) Keycloak role → Spring 권한 매핑
-//    private JwtAuthenticationConverter keycloakRoleConverter() {
-//        var converter = new JwtAuthenticationConverter();
-//        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
-//        return converter;
-//    }
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // API이므로 CSRF 비활성화
+                // API 서버면 보통 CSRF 비활성화
                 .csrf(csrf -> csrf.disable())
 
-                // CORS (프론트 도메인 넣어두면 편함)
+                // CORS (프론트 도메인 허용)
                 .cors(cors -> cors.configurationSource(req -> {
                     var c = new CorsConfiguration();
-                    c.setAllowedOrigins(List.of("http://localhost:3000")); // 필요에 맞게
+                    c.setAllowedOrigins(List.of("http://localhost:3000"));
                     c.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
                     c.setAllowedHeaders(List.of("Authorization","Content-Type"));
                     c.setAllowCredentials(true);
                     return c;
                 }))
 
-                // 요청 권한 매칭
+                // 인가 규칙
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/signup").permitAll()
-                        // ✅ 토큰 발급 및 헬스체크는 열어두기
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        // ✅ 사전 허용(인증 불필요) 엔드포인트
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/actuator/health", "/public/**").permitAll()
+                        .requestMatchers("/api/v1/auth/otp/**").permitAll()     // OTP 전송/검증
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
 
-                        // (원하면 Swagger도 허용)
-                        //.requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-
-                        // 그 외는 인증 필수
+                        // 그 외는 인증 필요
                         .anyRequest().authenticated()
                 )
 
-//                // ✅ Bearer 토큰(JWT) 검증 사용
-//                .oauth2ResourceServer(oauth -> oauth
-//                        .jwt(jwt -> jwt.jwtAuthenticationConverter(keycloakRoleConverter()))
-//                )
+                // 리소스 서버(JWT) 사용 – 위 permitAll 경로는 검증에서 제외됨
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
 
-                // 세션을 굳이 쓰지 않음 (stateless)
+                // 세션 비활성(Stateless)
                 .sessionManagement(sm -> sm.sessionCreationPolicy(
                         org.springframework.security.config.http.SessionCreationPolicy.STATELESS
                 ));
