@@ -16,6 +16,13 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
 
+//    // (옵션) Keycloak role → Spring 권한 매핑
+//    private JwtAuthenticationConverter keycloakRoleConverter() {
+//        var converter = new JwtAuthenticationConverter();
+//        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
+//        return converter;
+//    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -41,6 +48,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/otp/**").permitAll()     // OTP 전송/검증
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
+
+                        // ✅ Report API 테스트용 임시 허용 (개발 후 삭제할 것!)
+                        .requestMatchers("/api/reports/**").permitAll()
+
+                        // (원하면 Swagger도 허용)
+                        //.requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
 
                         // 그 외는 인증 필요
                         .anyRequest().authenticated()
