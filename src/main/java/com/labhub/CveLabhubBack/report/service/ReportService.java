@@ -68,12 +68,13 @@ public class ReportService {
     }
 
     /**
-     * 2️⃣ 보고서 업로드 (저장)
+     * 2️⃣ 보고서 업로드 (저장) - 덮어쓰기 방식
      * PUT /api/reports/{id}/file
+     * 동일 S3 경로에 덮어쓰기, updated_at만 갱신
      */
     @Transactional
     public ReportUploadResponse uploadReportFile(Long reportId, Long userId, MultipartFile file) {
-        log.info("Uploading file for reportId={}, userId={}", reportId, userId);
+        log.info("Uploading file for reportId={}, userId={} (overwrite mode)", reportId, userId);
 
         // 보고서 조회
         Report report = reportRepository.findByIdAndUserId(reportId, userId)
@@ -85,24 +86,22 @@ public class ReportService {
             throw new IllegalArgumentException("Only .docx files are allowed");
         }
 
-        // 새 버전으로 키 생성
-        report.incrementVersion();
-        String newS3Key = s3StorageUtil.generateNewVersionKey(report.getFileUrl(), report.getVersion());
+        // 기존 S3 키 사용 (덮어쓰기)
+        String s3Key = report.getFileUrl();
+        
+        // S3에 업로드 (동일 경로에 덮어쓰기)
+        s3StorageUtil.uploadFile(file, s3Key);
 
-        // S3에 업로드
-        s3StorageUtil.uploadFile(file, newS3Key);
-
-        // DB 업데이트
-        report.setFileUrl(newS3Key);
+        // DB updated_at 갱신 (JPA @PreUpdate로 자동 처리)
         Report updatedReport = reportRepository.save(report);
 
-        log.info("Report file uploaded successfully. New version={}", updatedReport.getVersion());
+        log.info("Report file uploaded successfully (overwrite). S3 Key: {}", s3Key);
 
         return ReportUploadResponse.builder()
                 .reportId(updatedReport.getId())
-                .fileUrl(newS3Key)
+                .fileUrl(s3Key)
                 .version(updatedReport.getVersion())
-                .message("파일이 성공적으로 업로드되었습니다.")
+                .message("파일이 성공적으로 업로드되었습니다. (덮어쓰기)")
                 .build();
     }
 
