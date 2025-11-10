@@ -50,7 +50,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-mail'
     //terraform
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign:4.1.2'
+
+    // prometheus
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
 }
 
 dependencyManagement {
