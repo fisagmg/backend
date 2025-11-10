@@ -17,17 +17,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-//@CrossOrigin(origins = "http://localhost:3000")
 public class AuthFlowController {
 
     private final AuthFlowService authFlowService;
     private final OtpService otpService;
     private final EmailService emailService;
 
-    /**
-     * 로그인 - Keycloak 토큰 발급
-     * @return Keycloak에서 발급한 토큰 값 반환
-     */
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequestDto request) {
         try {
@@ -48,9 +43,6 @@ public class AuthFlowController {
         }
     }
 
-    /**
-     * 회원가입 - Keycloak 사용자 생성 + DB 저장
-     */
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@RequestBody RegisterRequestDto req) {
         // 입력값 검증
@@ -63,7 +55,6 @@ public class AuthFlowController {
         }
 
         try {
-            // Service에서 회원가입 처리 (Keycloak 생성 + DB 저장)
             String userId = authFlowService.signup(req);
 
             return ResponseEntity.ok(Map.of(
@@ -94,20 +85,21 @@ public class AuthFlowController {
             ));
         }
     }
-    // com.labhub.CveLabhubBack.auth.controller.AuthFlowController (기존 클래스에 추가)
+
+    // 이메일 인증번호 보내기
     @PostMapping("/otp/send")
     public ResponseEntity<?> sendOtp(@RequestParam String email) {
-        // 회사 도메인 검증은 프론트/백 모두에서 하는 것을 권장
-        String code = otpService.generate(email);
-        emailService.sendOtp(email, code);
+        String code = otpService.generate(email); // 랜덤 코드 생성
+        emailService.sendOtp(email, code); //실제 이메일 전송
         return ResponseEntity.ok(Map.of("status","SENT"));
     }
 
+    // 인증번호 검증
     @PostMapping("/otp/verify")
     public ResponseEntity<?> verifyOtp(@RequestParam String email, @RequestParam String code) {
         boolean ok = otpService.verify(email, code);
         if (!ok) return ResponseEntity.status(400).body(Map.of("status","INVALID"));
-        otpService.consume(email); // 1회성 소모
+        otpService.consume(email); // 인증 성공 시 저장된 인증코드 데이터 삭제
         return ResponseEntity.ok(Map.of("status","OK"));
     }
 }

@@ -5,13 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * Access Token을 발급받기 위해 필요한 데이터
- *
- * @author : jonghoon
- * @fileName : TokenRequestDto
- * @since : 25. 1. 25.
- */
+
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TokenRequestDto {
