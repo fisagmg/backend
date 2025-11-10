@@ -1,27 +1,35 @@
 package com.labhub.CveLabhubBack.auth.config;
 
+import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 
-import java.util.List;
+import java.util.Arrays;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-//    // (옵션) Keycloak role → Spring 권한 매핑
-//    private JwtAuthenticationConverter keycloakRoleConverter() {
-//        var converter = new JwtAuthenticationConverter();
-//        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
-//        return converter;
-//    }
+    // ===== 환경변수 주입 (application.properties → .env) =====
+    @Value("${cors.allowed-origins}")
+    private String allowedOrigins;
+
+    @Value("${cors.allowed-methods}")
+    private String allowedMethods;
+
+    @Value("${cors.allowed-headers}")
+    private String allowedHeaders;
+
+    @Value("${cors.allow-credentials}")
+    private boolean allowCredentials;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -30,27 +38,25 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
 
                 // CORS (프론트 도메인 허용)
+                // 브라우저가 백엔드(API)를 요청할 때 막히지 않도록, 허용해주는 목록
                 .cors(cors -> cors.configurationSource(req -> {
                     var c = new CorsConfiguration();
-                    c.setAllowedOrigins(List.of("http://localhost:3000"));
-                    c.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
-                    c.setAllowedHeaders(List.of("Authorization","Content-Type"));
-                    c.setAllowCredentials(true);
+                    c.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
+                    c.setAllowedMethods(Arrays.asList(allowedMethods.split(",")));
+                    c.setAllowedHeaders(Arrays.asList(allowedHeaders.split(",")));
+                    c.setAllowCredentials(allowCredentials);
                     return c;
                 }))
 
                 // 인가 규칙
                 .authorizeHttpRequests(auth -> auth
-                        // ✅ 사전 허용(인증 불필요) 엔드포인트
+                        // 사전 허용(인증 불필요) 엔드포인트
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/actuator/health", "/public/**").permitAll()
                         .requestMatchers("/api/v1/auth/otp/**").permitAll()     // OTP 전송/검증
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
-
-                        // ✅ Report API 테스트용 임시 허용 (개발 후 삭제할 것!)
-                        .requestMatchers("/api/reports/**").permitAll()
 
                         // (원하면 Swagger도 허용)
                         //.requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
@@ -69,4 +75,13 @@ public class SecurityConfig {
 
         return http.build();
     }
+
+    public Long currentUserId(Jwt jwt, UserRepository usersRepo){
+        String email = (String) jwt.getClaims().getOrDefault("email",
+                jwt.getClaimAsString("preferred_username")); // fallback
+        return usersRepo.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("등록되지 않은 사용자: " + email))
+                .getId();
+    }
 }
+

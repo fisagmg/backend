@@ -2,18 +2,12 @@ package com.labhub.CveLabhubBack.auth.controller;
 
 import com.labhub.CveLabhubBack.auth.dto.LoginRequestDto;
 import com.labhub.CveLabhubBack.auth.dto.RegisterRequestDto;
-import com.labhub.CveLabhubBack.auth.entity.UserEntity;
-import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
 import com.labhub.CveLabhubBack.auth.service.AuthFlowService;
 import com.labhub.CveLabhubBack.auth.service.EmailService;
-import com.labhub.CveLabhubBack.auth.service.KeycloakAdminService;
 import com.labhub.CveLabhubBack.auth.service.OtpService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 
@@ -23,26 +17,15 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:3000")
+//@CrossOrigin(origins = "http://localhost:3000")
 public class AuthFlowController {
 
-    private final AuthFlowService authFlowService; // 토큰 발급 담당
-    private final KeycloakAdminService keycloakAdminService; // 유저 생성 담당
+    private final AuthFlowService authFlowService;
     private final OtpService otpService;
     private final EmailService emailService;
-    private final UserRepository userRepository;
-
-    @Value("${keycloak.client-id}")
-    private String CLIENT_ID;
-
-    @Value("${keycloak.client-secret}")
-    private String CLIENT_SECRET;
-
-    @Value("${keycloak.grant-type}")
-    private String GRANT_TYPE;
 
     /**
-     * Direct Access Grants Flow : 토큰을 즉시 요청하는 방법
+     * 로그인 - Keycloak 토큰 발급
      * @return Keycloak에서 발급한 토큰 값 반환
      */
     @PostMapping("/login")
@@ -51,21 +34,7 @@ public class AuthFlowController {
             log.info("[LOGIN] going to Keycloak with username={}, password={}",
                     request.getUsername(), request.getPassword());
 
-            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-            form.add("grant_type", GRANT_TYPE);
-            form.add("client_id", CLIENT_ID);
-            form.add("client_secret", CLIENT_SECRET);
-            form.add("username", request.getUsername());
-            form.add("password", request.getPassword());
-
-            log.debug("[LOGIN-DEBUG] Sending to Keycloak: "
-                            + "grant_type={}, client_id={}, client_secret=****, username={}, password=****",
-                    GRANT_TYPE, CLIENT_ID, request.getUsername());
-
-            Object tokenResponse = authFlowService.getAccessToken(
-                    GRANT_TYPE,
-                    CLIENT_ID,
-                    CLIENT_SECRET,
+            Object tokenResponse = authFlowService.login(
                     request.getUsername(),
                     request.getPassword()
             );
@@ -79,9 +48,12 @@ public class AuthFlowController {
         }
     }
 
-    /** 회원가입 → Keycloak에 사용자 생성 */
+    /**
+     * 회원가입 - Keycloak 사용자 생성 + DB 저장
+     */
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@RequestBody RegisterRequestDto req) {
+        // 입력값 검증
         if (req.getEmail() == null || req.getPassword() == null || 
             req.getFirstName() == null || req.getLastName() == null) {
             return ResponseEntity.badRequest().body(Map.of(
@@ -91,36 +63,15 @@ public class AuthFlowController {
         }
 
         try {
-            log.info("[SIGNUP] 회원가입 시도: email={}, firstName={}, lastName={}", 
-                    req.getEmail(), req.getFirstName(), req.getLastName());
-            
-            String userId = keycloakAdminService.createUser(
-                    req.getEmail(),
-                    req.getPassword(),
-                    req.getFirstName(),
-                    req.getLastName(),
-                    req.getPhone()
-            );
+            // Service에서 회원가입 처리 (Keycloak 생성 + DB 저장)
+            String userId = authFlowService.signup(req);
 
-            keycloakAdminService.sendVerifyEmail(userId);
-
-            // DB 저장
-            UserEntity user = new UserEntity();
-            user.setKcUserId(userId);
-            user.setEmail(req.getEmail());
-            user.setFirstName(req.getFirstName());
-            user.setLastName(req.getLastName());
-            user.setPhone(req.getPhone());
-            userRepository.save(user);
-
-            log.info("[SIGNUP] 회원가입 성공: userId={}, email={}", userId, req.getEmail());
             return ResponseEntity.ok(Map.of(
                     "status", "SUCCESS",
                     "userId", userId,
                     "email", req.getEmail(),
                     "verification", "MAIL_SENT"
             ));
-
 
         } catch (HttpClientErrorException e) {
             log.error("[SIGNUP] HttpClientErrorException: status={}, body={}", 
