@@ -1,38 +1,3 @@
-//package com.labhub.CveLabhubBack.service;
-//
-//import com.labhub.CveLabhubBack.config.KeycloakFeignConfig;
-//import org.springframework.cloud.openfeign.FeignClient;
-//import org.springframework.http.MediaType;
-//import org.springframework.util.MultiValueMap;
-//import org.springframework.web.bind.annotation.PostMapping;
-//import org.springframework.web.bind.annotation.RequestBody;
-//import org.springframework.web.bind.annotation.RequestParam;
-//
-///**
-// * Keycloak 서버와 통신하여서 데이터를 수신합니다.
-// */
-//@FeignClient(
-//        name = "keycloak-auth-service",
-//        url = "http://localhost:8080/realms/dev-realm",
-//        configuration = KeycloakFeignConfig.class // ✅ 여기가 연결 포인트
-//)
-//public interface AuthFlowService {
-//
-//    /**
-//     * Direct Access Flow : 토큰을 즉시 요청하는 방법
-//     *
-//     * @return 토큰 값 반환
-//     */
-//
-//
-//    @PostMapping(
-//            value = "/protocol/openid-connect/token",
-//            consumes = "application/x-www-form-urlencoded"
-//    )
-//    Object getAccessToken(@RequestBody MultiValueMap<String, String> formData);
-//}
-
-
 package com.labhub.CveLabhubBack.auth.service;
 
 import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
@@ -79,7 +44,7 @@ public class AuthFlowService {
             String username,
             String password
     ) {
-        // 환경변수에서 Keycloak 토큰 URL 구성
+
         String tokenUrl = keycloakBaseUrl + "/realms/" + keycloakRealm + "/protocol/openid-connect/token";
 
         // 1. form 바디 만들기
@@ -102,16 +67,10 @@ public class AuthFlowService {
         ResponseEntity<Object> response =
                 restTemplate.postForEntity(tokenUrl, entity, Object.class);
 
-        // 4. body만 돌려주자
+        // 4. body만 돌려주기
         return response.getBody();
     }
 
-    /**
-     * 회원가입 처리 (Keycloak 사용자 생성 + DB 저장)
-     * @param request 회원가입 요청 DTO
-     * @return 생성된 사용자 ID
-     * @throws HttpClientErrorException Keycloak 관련 오류 시
-     */
     @Transactional
     public String signup(RegisterRequestDto request) {
         log.info("[SIGNUP] 회원가입 시도: email={}, firstName={}, lastName={}", 
@@ -142,12 +101,6 @@ public class AuthFlowService {
         return kcUserId;
     }
 
-    /**
-     * 로그인 (Keycloak 토큰 발급)
-     * @param username 사용자명 (이메일)
-     * @param password 비밀번호
-     * @return Keycloak 토큰 응답
-     */
     public Object login(String username, String password) {
         return getAccessToken(grantType, clientId, clientSecret, username, password);
     }

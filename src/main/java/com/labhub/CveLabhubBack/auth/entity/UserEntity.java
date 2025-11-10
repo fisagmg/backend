@@ -26,7 +26,7 @@ public class UserEntity {
     private Long id;
 
     @Column(name = "kc_user_id", nullable = false, length = 64)
-    private String kcUserId;                // Keycloak sub
+    private String kcUserId;
 
     @Column(nullable = false, length = 190)
     private String email;
@@ -40,7 +40,7 @@ public class UserEntity {
     @Column(length = 30)
     private String phone;
 
-    @Enumerated(EnumType.STRING) // 🔹 Enum 이름 그대로 문자열로 저장 (USER / ADMIN)
+    @Enumerated(EnumType.STRING) // Enum 이름 그대로 문자열로 저장 (USER / ADMIN)
     @Column(nullable = false, length = 20)
     private UserRole role = UserRole.USER;
 

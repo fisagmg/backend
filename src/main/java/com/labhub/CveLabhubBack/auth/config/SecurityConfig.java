@@ -18,7 +18,6 @@ import java.util.Arrays;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    // ===== 환경변수 주입 (application.properties → .env) =====
     @Value("${cors.allowed-origins}")
     private String allowedOrigins;
 
@@ -48,20 +47,13 @@ public class SecurityConfig {
                     return c;
                 }))
 
-                // 인가 규칙
                 .authorizeHttpRequests(auth -> auth
-                        // 사전 허용(인증 불필요) 엔드포인트
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/actuator/health", "/public/**").permitAll()
                         .requestMatchers("/api/v1/auth/otp/**").permitAll()     // OTP 전송/검증
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
-
-                        // (원하면 Swagger도 허용)
-                        //.requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
-
-                        // 그 외는 인증 필요
                         .anyRequest().authenticated()
                 )
 
