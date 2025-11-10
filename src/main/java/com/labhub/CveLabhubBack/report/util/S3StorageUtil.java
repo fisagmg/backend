@@ -16,8 +16,6 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequ
 
 import java.io.IOException;
 import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 @Slf4j
 @Component
@@ -36,11 +34,12 @@ public class S3StorageUtil {
 
     /**
      * 템플릿 파일을 복사하여 새로운 보고서 생성
+     * 고정 경로 사용: reports/{userId}/{cveId}/report.docx (덮어쓰기 가능)
      */
     public String copyTemplateToNewReport(Long userId, String cveId) {
         try {
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            String destinationKey = String.format("reports/%d/%s/%s_v1.docx", userId, cveId, timestamp);
+            // 고정 경로 사용 (타임스탬프 없음)
+            String destinationKey = String.format("reports/%d/%s/report.docx", userId, cveId);
 
             CopyObjectRequest copyRequest = CopyObjectRequest.builder()
                     .sourceBucket(bucketName)
@@ -51,7 +50,7 @@ public class S3StorageUtil {
 
             s3Client.copyObject(copyRequest);
             
-            log.info("Template copied successfully to: {}", destinationKey);
+            log.info("Template copied successfully to fixed path: {}", destinationKey);
             return destinationKey;
             
         } catch (S3Exception e) {

@@ -33,6 +33,18 @@ public class ReportService {
     public ReportResponse createReport(ReportCreateRequest request) {
         log.info("Creating new report for userId={}, cveId={}", request.getUserId(), request.getCveId());
 
+        // 같은 userId + cveId 조합의 보고서가 이미 있는지 확인
+        List<Report> existingReports = reportRepository.findByCveIdAndUserId(request.getCveId(), request.getUserId());
+        
+        if (!existingReports.isEmpty()) {
+            // 이미 존재하면 기존 보고서 반환
+            Report existingReport = existingReports.get(0);
+            String presignedUrl = s3StorageUtil.generatePresignedUrl(existingReport.getFileUrl());
+            log.info("Report already exists for userId={}, cveId={}, returning existing report id={}", 
+                    request.getUserId(), request.getCveId(), existingReport.getId());
+            return ReportResponse.fromEntityWithPresignedUrl(existingReport, presignedUrl);
+        }
+
         // S3에서 템플릿 복제
         String s3Key = s3StorageUtil.copyTemplateToNewReport(request.getUserId(), request.getCveId());
 
@@ -56,12 +68,13 @@ public class ReportService {
     }
 
     /**
-     * 2️⃣ 보고서 업로드 (저장)
+     * 2️⃣ 보고서 업로드 (저장) - 덮어쓰기 방식
      * PUT /api/reports/{id}/file
+     * 동일 S3 경로에 덮어쓰기, updated_at만 갱신
      */
     @Transactional
     public ReportUploadResponse uploadReportFile(Long reportId, Long userId, MultipartFile file) {
-        log.info("Uploading file for reportId={}, userId={}", reportId, userId);
+        log.info("Uploading file for reportId={}, userId={} (overwrite mode)", reportId, userId);
 
         // 보고서 조회
         Report report = reportRepository.findByIdAndUserId(reportId, userId)
@@ -73,24 +86,22 @@ public class ReportService {
             throw new IllegalArgumentException("Only .docx files are allowed");
         }
 
-        // 새 버전으로 키 생성
-        report.incrementVersion();
-        String newS3Key = s3StorageUtil.generateNewVersionKey(report.getFileUrl(), report.getVersion());
+        // 기존 S3 키 사용 (덮어쓰기)
+        String s3Key = report.getFileUrl();
+        
+        // S3에 업로드 (동일 경로에 덮어쓰기)
+        s3StorageUtil.uploadFile(file, s3Key);
 
-        // S3에 업로드
-        s3StorageUtil.uploadFile(file, newS3Key);
-
-        // DB 업데이트
-        report.setFileUrl(newS3Key);
+        // DB updated_at 갱신 (JPA @PreUpdate로 자동 처리)
         Report updatedReport = reportRepository.save(report);
 
-        log.info("Report file uploaded successfully. New version={}", updatedReport.getVersion());
+        log.info("Report file uploaded successfully (overwrite). S3 Key: {}", s3Key);
 
         return ReportUploadResponse.builder()
                 .reportId(updatedReport.getId())
-                .fileUrl(newS3Key)
+                .fileUrl(s3Key)
                 .version(updatedReport.getVersion())
-                .message("파일이 성공적으로 업로드되었습니다.")
+                .message("파일이 성공적으로 업로드되었습니다. (덮어쓰기)")
                 .build();
     }
 
@@ -128,7 +139,7 @@ public class ReportService {
     }
 
     /**
-     * 5️⃣ 보고서 삭제 (Soft Delete)
+     * 5️⃣ 보고서 삭제 (Hard Delete - DB + S3)
      * DELETE /api/reports/{id}
      */
     @Transactional
@@ -138,11 +149,20 @@ public class ReportService {
         Report report = reportRepository.findByIdAndUserId(reportId, userId)
                 .orElseThrow(() -> new ReportNotFoundException(reportId));
 
-        // Soft delete
+        // S3 파일 삭제
+        try {
+            s3StorageUtil.deleteFile(report.getFileUrl());
+            log.info("S3 file deleted successfully: {}", report.getFileUrl());
+        } catch (Exception e) {
+            log.error("Failed to delete S3 file: {}", report.getFileUrl(), e);
+            // S3 삭제 실패해도 DB는 삭제 진행 (선택사항)
+        }
+
+        // DB에서 Soft delete
         report.softDelete();
         reportRepository.save(report);
 
-        log.info("Report soft deleted successfully. reportId={}", reportId);
+        log.info("Report deleted successfully (DB soft delete + S3 hard delete). reportId={}", reportId);
     }
 
     /**
