@@ -35,19 +35,42 @@
 
 package com.labhub.CveLabhubBack.auth.service;
 
+import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
+import com.labhub.CveLabhubBack.auth.dto.RegisterRequestDto;
+import com.labhub.CveLabhubBack.auth.entity.UserEntity;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthFlowService {
 
-    private static final String TOKEN_URL =
-            "http://172.16.1.110:9090/realms/dev-realm/protocol/openid-connect/token";
+    private final KeycloakAdminService keycloakAdminService;
+    private final UserRepository userRepository;
+
+    @Value("${keycloak.base-url}")
+    private String keycloakBaseUrl;
+
+    @Value("${keycloak.realm}")
+    private String keycloakRealm;
+
+    @Value("${keycloak.client-id}")
+    private String clientId;
+
+    @Value("${keycloak.client-secret}")
+    private String clientSecret;
+
+    @Value("${keycloak.grant-type}")
+    private String grantType;
 
     public Object getAccessToken(
             String grantType,
@@ -56,6 +79,8 @@ public class AuthFlowService {
             String username,
             String password
     ) {
+        // 환경변수에서 Keycloak 토큰 URL 구성
+        String tokenUrl = keycloakBaseUrl + "/realms/" + keycloakRealm + "/protocol/openid-connect/token";
 
         // 1. form 바디 만들기
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
@@ -75,9 +100,55 @@ public class AuthFlowService {
         // 3. 요청 날리기
         RestTemplate restTemplate = new RestTemplate();
         ResponseEntity<Object> response =
-                restTemplate.postForEntity(TOKEN_URL, entity, Object.class);
+                restTemplate.postForEntity(tokenUrl, entity, Object.class);
 
         // 4. body만 돌려주자
         return response.getBody();
+    }
+
+    /**
+     * 회원가입 처리 (Keycloak 사용자 생성 + DB 저장)
+     * @param request 회원가입 요청 DTO
+     * @return 생성된 사용자 ID
+     * @throws HttpClientErrorException Keycloak 관련 오류 시
+     */
+    @Transactional
+    public String signup(RegisterRequestDto request) {
+        log.info("[SIGNUP] 회원가입 시도: email={}, firstName={}, lastName={}", 
+                request.getEmail(), request.getFirstName(), request.getLastName());
+
+        // 1. Keycloak에 사용자 생성
+        String kcUserId = keycloakAdminService.createUser(
+                request.getEmail(),
+                request.getPassword(),
+                request.getFirstName(),
+                request.getLastName(),
+                request.getPhone()
+        );
+
+        // 2. 인증 이메일 전송
+        keycloakAdminService.sendVerifyEmail(kcUserId);
+
+        // 3. DB에 사용자 정보 저장
+        UserEntity user = new UserEntity();
+        user.setKcUserId(kcUserId);
+        user.setEmail(request.getEmail());
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setPhone(request.getPhone());
+        userRepository.save(user);
+
+        log.info("[SIGNUP] 회원가입 성공: userId={}, email={}", kcUserId, request.getEmail());
+        return kcUserId;
+    }
+
+    /**
+     * 로그인 (Keycloak 토큰 발급)
+     * @param username 사용자명 (이메일)
+     * @param password 비밀번호
+     * @return Keycloak 토큰 응답
+     */
+    public Object login(String username, String password) {
+        return getAccessToken(grantType, clientId, clientSecret, username, password);
     }
 }
