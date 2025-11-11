@@ -55,6 +55,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
+    // Jsoup (HTML 파싱)
+    implementation 'org.jsoup:jsoup:1.17.2'
+
     // VM Provisioning - SSH 클라이언트
     implementation 'com.jcraft:jsch:0.1.55'
 }
