@@ -12,12 +12,15 @@ import com.labhub.CveLabhubBack.news.repository.NewsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -58,7 +61,7 @@ public class NaverNewsService {
         int totalSaved = 0;
         int totalMapped = 0;
 
-        String[] keywords = {"CVE-2025", "CVE-2024", "CVE-2023", "취약점"};
+        String[] keywords = {"CVE-2025", "CVE-2024", "CVE-2023"};
 
         for (String keyword : keywords) {
             try {
@@ -108,16 +111,17 @@ public class NaverNewsService {
                     String title = cleanHtml(item.path("title").asText());
                     String description = cleanHtml(item.path("description").asText());
                     String link = item.path("link").asText();
-                    String pubDate = item.path("pubDate").asText();
+                    String originLink = item.path("originallink").asText();
+                    String targetUrl = originLink != null && !originLink.isBlank() ? originLink : link;
 
-                    String publisher = extractPublisher(pubDate);
+                    ArticleMetadata metadata = resolveArticleMetadata(targetUrl);
 
                     News news = News.builder()
-                            .publisher(publisher)
+                            .publisher(metadata.publisher())
                             .title(title)
                             .firstLine(description)
-                            .thumbnail(DEFAULT_THUMBNAIL)
-                            .externalUrl(link)
+                            .thumbnail(metadata.thumbnail())
+                            .externalUrl(targetUrl)
                             .build();
 
                     newsList.add(news);
@@ -138,9 +142,89 @@ public class NaverNewsService {
         return Jsoup.parse(html).text();
     }
 
-    private String extractPublisher(String pubDate) {
-        return "네이버뉴스";
+    private ArticleMetadata resolveArticleMetadata(String url) {
+        if (url == null || url.isBlank()) {
+            return new ArticleMetadata(DEFAULT_THUMBNAIL, "네이버뉴스");
+        }
+
+        try {
+            Document document = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+                    .timeout(5000)
+                    .get();
+
+            String thumbnail = firstNonEmpty(
+                    selectMetaContent(document, "meta[property=og:image]"),
+                    selectMetaContent(document, "meta[name=twitter:image]"),
+                    DEFAULT_THUMBNAIL
+            );
+
+            String publisher = firstNonEmpty(
+                    selectMetaContent(document, "meta[property=og:site_name]"),
+                    selectMetaContent(document, "meta[name=twitter:site]"),
+                    extractPublisherFromUrl(url),
+                    "네이버뉴스"
+            );
+
+            return new ArticleMetadata(thumbnail, sanitizePublisher(publisher));
+
+        } catch (Exception e) {
+            log.debug("기사 메타데이터 추출 실패: {}", url, e);
+            return new ArticleMetadata(DEFAULT_THUMBNAIL, extractPublisherFromUrl(url));
+        }
     }
+
+    private String selectMetaContent(Document document, String selector) {
+        Element element = document.selectFirst(selector);
+        if (element == null) {
+            return null;
+        }
+        String content = element.attr("content");
+        return content != null && !content.isBlank() ? content.trim() : null;
+    }
+
+    private String extractPublisherFromUrl(String url) {
+        try {
+            URI uri = new URI(url);
+            String host = uri.getHost();
+            if (host == null) {
+                return "네이버뉴스";
+            }
+            if (host.contains("naver.com")) {
+                return "네이버뉴스";
+            }
+            host = host.replaceFirst("^www\\.", "");
+            int dotIndex = host.indexOf('.');
+            if (dotIndex > 0) {
+                return host.substring(0, dotIndex).toUpperCase();
+            }
+            return host.toUpperCase();
+        } catch (Exception e) {
+            return "네이버뉴스";
+        }
+    }
+
+    private String sanitizePublisher(String publisher) {
+        if (publisher == null) {
+            return "네이버뉴스";
+        }
+        String value = publisher.trim();
+        if (value.startsWith("@")) {
+            value = value.substring(1);
+        }
+        return value.isBlank() ? "네이버뉴스" : value;
+    }
+
+    private String firstNonEmpty(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private record ArticleMetadata(String thumbnail, String publisher) {}
 
     @Transactional
     public int mapCveToNews(News news) {
@@ -193,4 +277,5 @@ public class NaverNewsService {
                 .collect(Collectors.toList());
     }
 }
+
 
