@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/otp/**").permitAll()     // OTP 전송/검증
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/signup").permitAll()
+                        .requestMatchers("/actuator/prometheus", "/actuator/health").permitAll()
                         .anyRequest().authenticated()
                 )
 
