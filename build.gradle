@@ -60,6 +60,15 @@ dependencies {
 
     // VM Provisioning - SSH 클라이언트
     implementation 'com.jcraft:jsch:0.1.55'
+
+    // Swagger
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    //implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.14'
+
+
+    // 테스트용 임베디드(임시) DB
+    testImplementation 'com.h2database:h2'
+
 }
 
 dependencyManagement {
