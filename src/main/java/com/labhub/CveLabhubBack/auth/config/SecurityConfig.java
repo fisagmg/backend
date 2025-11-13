@@ -36,7 +36,7 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain publicFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/v1/auth/**", "/actuator/**", "/public/**", "/error", "/api/v1/news/**")
+                .securityMatcher("/api/v1/auth/**", "/actuator/**", "/public/**", "/error", "/api/news/**")
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(req -> {
                     var c = new CorsConfiguration();
