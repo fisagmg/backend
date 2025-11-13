@@ -10,5 +10,6 @@ import java.util.Optional;
 public interface CveRepository extends JpaRepository<Cve, Long> {
 
     Optional<Cve> findByYearAndNum(Integer year, Integer num);
+    Optional<Cve> findByName(String name);
 }
 

@@ -7,6 +7,6 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface CveNewsMappingRepository extends JpaRepository<CveNewsMapping, CveNewsMapping.CveNewsMappingId> {
 
-    boolean existsByNewsIdAndCveId(Long newsId, Long cveId);
+    boolean existsByNewsIdAndCveId(Long newsId, Integer cveId);
 }
 
