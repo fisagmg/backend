@@ -1,6 +1,7 @@
 package com.labhub.CveLabhubBack.cve_lab.entity;
 
 import com.labhub.CveLabhubBack.auth.entity.UserEntity;
+import com.labhub.CveLabhubBack.cve.entity.Cve;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

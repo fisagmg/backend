@@ -21,7 +21,7 @@ public class CveNewsMapping {
 
     @Id
     @Column(name = "cve_id")
-    private Long cveId;
+    private Integer cveId;
 
     // Composite Key
     @Data

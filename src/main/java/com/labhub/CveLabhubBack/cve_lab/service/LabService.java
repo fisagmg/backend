@@ -2,15 +2,14 @@ package com.labhub.CveLabhubBack.cve_lab.service;
 
 import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
 import com.labhub.CveLabhubBack.auth.entity.UserEntity;
+import com.labhub.CveLabhubBack.cve.repository.CveRepository;
 import com.labhub.CveLabhubBack.cve_lab.client.RunnerClient;
-import com.labhub.CveLabhubBack.cve_lab.entity.Cve;
+import com.labhub.CveLabhubBack.cve.entity.Cve;
 import com.labhub.CveLabhubBack.cve_lab.entity.Lab;
 import com.labhub.CveLabhubBack.cve_lab.entity.LabStatus;
 import com.labhub.CveLabhubBack.cve_lab.dto.LabCreateRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.LabCreateResponse;
 import com.labhub.CveLabhubBack.cve_lab.dto.RunRequest;
 import com.labhub.CveLabhubBack.cve_lab.dto.RunResponse;
-import com.labhub.CveLabhubBack.cve_lab.repository.CveRepository;
 import com.labhub.CveLabhubBack.cve_lab.repository.LabRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
