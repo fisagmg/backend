@@ -54,5 +54,8 @@ public class Lab {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private LabStatus status = LabStatus.ACTIVE;
+
+    @Column(name = "max_ttl_minutes")
+    private Integer maxTtlMinutes = 120;
 }
 
