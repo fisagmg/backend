@@ -34,6 +34,9 @@ public class RunnerClient {
                 .path(path)
                 .toUriString();
 
+        log.info("Sending to Runner: {}", request);
+
+
         try {
             ResponseEntity<RunResponse> responseEntity =
                     restTemplate.postForEntity(url, request, RunResponse.class);
