@@ -25,6 +25,7 @@ public class Cve {
     @Column(nullable = false, length = 100)
     private String outline;
 
+    // "Ubuntu", "CentOS", "Debian", "Windows" 등
     @Column(name = "lab_os", nullable = false, length = 100)
     private String labOs;
 

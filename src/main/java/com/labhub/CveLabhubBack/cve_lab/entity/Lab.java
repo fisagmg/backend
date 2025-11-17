@@ -25,6 +25,13 @@ public class Lab {
     @Id
     private String uuid;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private LabStatus status = LabStatus.ACTIVE;
+
+    @Column(name = "guacamole_connection_id", length = 255)
+    private String guacamoleConnectionId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cve_id", nullable = false)
     private Cve cve;
@@ -51,11 +58,6 @@ public class Lab {
     @Column(name = "terminated_at")
     private LocalDateTime terminatedAt;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private LabStatus status = LabStatus.ACTIVE;
-
     @Column(name = "max_ttl_minutes")
     private Integer maxTtlMinutes = 120;
 }
-

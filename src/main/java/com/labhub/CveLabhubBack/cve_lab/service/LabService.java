@@ -5,6 +5,7 @@ import com.labhub.CveLabhubBack.auth.entity.UserEntity;
 import com.labhub.CveLabhubBack.cve.repository.CveRepository;
 import com.labhub.CveLabhubBack.cve_lab.client.RunnerClient;
 import com.labhub.CveLabhubBack.cve.entity.Cve;
+import com.labhub.CveLabhubBack.cve_lab.dto.LabCreateResponse;
 import com.labhub.CveLabhubBack.cve_lab.entity.Lab;
 import com.labhub.CveLabhubBack.cve_lab.entity.LabStatus;
 import com.labhub.CveLabhubBack.cve_lab.dto.LabCreateRequest;
@@ -13,10 +14,12 @@ import com.labhub.CveLabhubBack.cve_lab.dto.RunResponse;
 import com.labhub.CveLabhubBack.cve_lab.repository.LabRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
@@ -31,36 +34,144 @@ public class LabService {
     private final UserRepository userRepository;
     private final LabRepository labRepository;
     private final CveRepository cveRepository;
+    private final GuacamoleService guacamoleService;
 
-    public RunResponse create(String authenticatedUserId, LabCreateRequest req) {
+    @Value("${ec2.ssh.private-key:}")
+    private String defaultPrivateKey;
+
+    @Value("${ec2.ssh.username:}")
+    private String defaultSshUsername;
+
+    @Value("${ec2.ssh.password:}")
+    private String defaultSshPassword;
+
+    @PostConstruct
+    void normalizeDefaultPrivateKey() {
+        if (defaultPrivateKey != null) {
+            // 줄바꿈 문자 정규화
+            defaultPrivateKey = defaultPrivateKey.replace("\\n", "\n");
+            // 이스케이프된 인용부호 제거 (환경변수에서 문자열로 저장된 경우)
+            defaultPrivateKey = defaultPrivateKey.replace("\\\"", "\"");
+            // 앞뒤 불필요한 인용부호 제거
+            defaultPrivateKey = defaultPrivateKey.trim();
+            if (defaultPrivateKey.startsWith("\"") && defaultPrivateKey.endsWith("\"")) {
+                defaultPrivateKey = defaultPrivateKey.substring(1, defaultPrivateKey.length() - 1);
+            }
+        }
+    }
+
+    public LabCreateResponse create(String authenticatedUserId, LabCreateRequest req) {
+        // 0. 유저 정보 resolve
         UserEntity user = resolveUser(authenticatedUserId);
-        String userId = String.valueOf(user.getId());
         String uuid = UUID.randomUUID().toString();
 
-        RunRequest runnerRequest = new RunRequest(uuid, req.cveId(), userId);
-        RunResponse response = runnerClient.create(runnerRequest);
-
+        // 1. Runner 호출 → VM 생성
+        RunRequest runnerRequest = new RunRequest(uuid, req.cveId(), String.valueOf(user.getId()));
+        RunResponse runnerResponse = runnerClient.create(runnerRequest);
         log.info("Terraform runner create response: status={}, uuid={}, cveId={}, userId={}",
-                response.status(), response.uuid(), response.cveId(), userId);
+                runnerResponse.status(), runnerResponse.uuid(), runnerResponse.cveId(), user.getId());
 
-        persistCreatedLab(user, req.cveId(), response);
+        // DB에 Lab 정보 저장 (Lab 객체 반환받음)
+        Lab lab = persistCreatedLab(user, req.cveId(), runnerResponse);
 
-        return response;
+        // 2. 초기 응답 생성 (guacamoleUrl = null)
+        LabCreateResponse labResponse = toLabCreateResponse(runnerResponse);
+
+        // Keycloak의 preferred_username이 email이므로 email 사용
+        String guacUsername = (user.getEmail() != null && !user.getEmail().isBlank())
+                ? user.getEmail()
+                : user.getKcUserId();
+
+        // 3. Guacamole 세션 생성 → connectionId 저장
+        try {
+            String connectionId = guacamoleService.createGuacSessionAndGetConnectionId(guacUsername, labResponse);
+            
+            // connectionId를 DB에 저장 (이미 조회한 lab 객체 사용)
+            lab.setGuacamoleConnectionId(connectionId);
+            labRepository.save(lab);
+            log.info("Guacamole connectionId saved to Lab: uuid={}, connectionId={}", uuid, connectionId);
+            
+            // 4. 최종 응답 완성
+            String iframeUrl = guacamoleService.buildIframeUrl(connectionId);
+            labResponse = labResponse.withGuacamoleUrl(iframeUrl);
+        } catch (Exception ex) {
+            log.error("Failed to create Guacamole session for uuid {}: {}", uuid, ex.getMessage(), ex);
+            // Guacamole 실패해도 VM은 생성되었으므로 응답 반환 (guacamoleUrl = null)
+        }
+
+        // 5. 반환
+        return labResponse;
     }
+
 
     public RunResponse destroy(String authenticatedUserId, RunRequest req) {
         UserEntity user = resolveUser(authenticatedUserId);
-        String userId = String.valueOf(user.getId());
-        RunRequest runnerRequest = new RunRequest(req.uuid(), req.cveId(), userId);
-        RunResponse response = runnerClient.destroy(runnerRequest);
-
+        RunResponse response = runnerClient.destroy(new RunRequest(req.uuid(), req.cveId(), String.valueOf(user.getId())));
         log.info("Terraform runner destroy response: status={}, uuid={}, cveId={}, userId={}",
-                response.status(), response.uuid(), response.cveId(), userId);
+                response.status(), response.uuid(), response.cveId(), user.getId());
 
         updateDestroyedLab(user, response);
-
+        
+        // Guacamole connection 삭제 (저장된 connectionId 사용)
+        try {
+            Lab lab = labRepository.findByUuid(req.uuid())
+                    .orElse(null);
+            
+            if (lab != null && lab.getGuacamoleConnectionId() != null && !lab.getGuacamoleConnectionId().isBlank()) {
+                guacamoleService.deleteGuacSession(lab.getGuacamoleConnectionId());
+                log.info("Guacamole connection deleted: uuid={}, connectionId={}", req.uuid(), lab.getGuacamoleConnectionId());
+            } else {
+                log.warn("Lab or Guacamole connectionId not found for uuid: {}", req.uuid());
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to delete Guacamole session for uuid {}: {}", req.uuid(), ex.getMessage());
+        }
         return response;
     }
+
+
+    /**
+     * RunResponse를 LabCreateResponse로 변환
+     * 
+     * 초기 생성 시 guacamoleUrl은 null로 설정
+     * SSH 접속 정보는 환경변수에서만 가져옴 (Terraform 응답에는 없음)
+     */
+    private LabCreateResponse toLabCreateResponse(RunResponse response) {
+        String privateIp = requiredOutputValue(response, "private_ip");
+        String hostname = firstNonBlank(outputValue(response, "hostname"), privateIp);
+        String instanceId = requiredOutputValue(response, "instance_id");
+        String status = firstNonBlank(outputValue(response, "status"), response.status());
+        
+        // SSH 접속 정보는 환경변수에서만 가져옴 (Terraform runner 응답에는 없음)
+        String sshUsername = (defaultSshUsername != null && !defaultSshUsername.isBlank())
+                ? defaultSshUsername
+                : "ubuntu";
+
+        // 현재는 사용하지 않음
+        String sshPassword = (defaultSshPassword != null && !defaultSshPassword.isBlank())
+                ? defaultSshPassword
+                : null;
+        
+        // privateKey는 항상 환경변수에서 가져옴
+        String privateKey = (defaultPrivateKey != null && !defaultPrivateKey.isBlank())
+                ? defaultPrivateKey
+                : null;
+
+        return new LabCreateResponse(
+                response.uuid(),
+                response.cveId(),
+                privateIp,
+                hostname,
+                instanceId,
+                status,
+                response.tfstatePath(),
+                null,  // guacamoleUrl 초기값: null (나중에 GuacamoleService에서 설정)
+                sshUsername,
+                sshPassword,
+                privateKey
+        );
+    }
+
 
     private UserEntity resolveUser(String authenticatedUserId) {
         if (authenticatedUserId == null || authenticatedUserId.isBlank()) {
@@ -69,6 +180,7 @@ public class LabService {
         return findDatabaseUser(authenticatedUserId);
     }
 
+
     private UserEntity findDatabaseUser(String identifier) {
         return userRepository.findByKcUserId(identifier)
                 .or(() -> userRepository.findByEmail(identifier))
@@ -76,8 +188,9 @@ public class LabService {
                 .orElseThrow(() -> new IllegalArgumentException("Cannot resolve userId for identifier: " + identifier));
     }
 
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void persistCreatedLab(UserEntity user, String requestedCveName, RunResponse response) {
+    public Lab persistCreatedLab(UserEntity user, String requestedCveName, RunResponse response) {
         Cve cve = cveRepository.findByName(requestedCveName)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown CVE: " + requestedCveName));
 
@@ -92,8 +205,9 @@ public class LabService {
         lab.setExpiresAt(parseDateTime(outputValue(response, "expires_at")));
         lab.setStatus(LabStatus.from(outputValue(response, "status")));
 
-        labRepository.save(lab);
+        return labRepository.save(lab);
     }
+
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateDestroyedLab(UserEntity user, RunResponse response) {
@@ -108,6 +222,7 @@ public class LabService {
         }, () -> log.warn("Lab with uuid {} not found during destroy handling.", response.uuid()));
     }
 
+
     private String outputValue(RunResponse response, String key) {
         if (response.outputs() == null) {
             return null;
@@ -116,6 +231,7 @@ public class LabService {
         return output != null ? output.value() : null;
     }
 
+
     private String requiredOutputValue(RunResponse response, String key) {
         String value = outputValue(response, key);
         if (value == null || value.isBlank()) {
@@ -123,6 +239,7 @@ public class LabService {
         }
         return value;
     }
+
 
     private LocalDateTime parseDateTime(String isoDateTime) {
         if (isoDateTime == null || isoDateTime.isBlank()) {
@@ -135,6 +252,7 @@ public class LabService {
             return null;
         }
     }
+
 
     private String firstNonBlank(String first, String second) {
         if (first != null && !first.isBlank()) {
