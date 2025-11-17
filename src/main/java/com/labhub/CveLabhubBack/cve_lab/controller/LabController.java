@@ -13,20 +13,31 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import lombok.extern.slf4j.Slf4j;  // 추가
+
+
 
 @RestController
 @RequestMapping("/labs")
 @RequiredArgsConstructor
+@Slf4j  // 추가
 public class LabController {
     private final LabService labService;
 
     @PostMapping("/create")
-    public ResponseEntity<RunResponse> create(@RequestBody LabCreateRequest req,
-                                              @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<LabCreateResponse> create(@RequestBody LabCreateRequest req,
+                                                    @AuthenticationPrincipal Jwt jwt) {
+        if (jwt != null) {
+            log.info("JWT claims: {}", jwt.getClaims());
+            log.info("preferred_username: {}", jwt.getClaimAsString("preferred_username"));
+            log.info("email: {}", jwt.getClaimAsString("email"));
+            log.info("sub: {}", jwt.getClaimAsString("sub"));
+        }
+        
         String userId = (jwt != null && jwt.hasClaim("sub"))
                 ? jwt.getClaimAsString("sub")
                 : null;
-        RunResponse response = labService.create(userId, req);
+        LabCreateResponse response = labService.create(userId, req);
         return ResponseEntity.ok(response);
     }
 

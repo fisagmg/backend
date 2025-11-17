@@ -70,6 +70,8 @@ dependencies {
     // 테스트용 임베디드(임시) DB
     testImplementation 'com.h2database:h2'
 
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.3.1'
+    
 }
 
 dependencyManagement {
