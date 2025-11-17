@@ -68,10 +68,13 @@ public class SecurityConfig {
                     c.setAllowCredentials(allowCredentials);
                     return c;
                 }))
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(
                         org.springframework.security.config.http.SessionCreationPolicy.STATELESS
                 ))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/news/**").permitAll()
+                        .anyRequest().authenticated()
+                )
                 .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
 
         return http.build();
