@@ -57,4 +57,7 @@ public class Lab {
 
     @Column(name = "terminated_at")
     private LocalDateTime terminatedAt;
+
+    @Column(name = "max_ttl_minutes")
+    private Integer maxTtlMinutes = 120;
 }
