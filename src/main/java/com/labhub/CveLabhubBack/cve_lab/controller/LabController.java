@@ -20,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;  // 추가
 @RestController
 @RequestMapping("/labs")
 @RequiredArgsConstructor
-@Slf4j  // 추가
+@Slf4j
 public class LabController {
     private final LabService labService;
 

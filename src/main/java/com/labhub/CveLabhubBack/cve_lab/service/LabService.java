@@ -39,7 +39,7 @@ public class LabService {
     @Value("${ec2.ssh.private-key:}")
     private String defaultPrivateKey;
 
-    @Value("${ec2.ssh.username:ubuntu}")
+    @Value("${ec2.ssh.username:}")
     private String defaultSshUsername;
 
     @Value("${ec2.ssh.password:}")
@@ -48,7 +48,15 @@ public class LabService {
     @PostConstruct
     void normalizeDefaultPrivateKey() {
         if (defaultPrivateKey != null) {
+            // 줄바꿈 문자 정규화
             defaultPrivateKey = defaultPrivateKey.replace("\\n", "\n");
+            // 이스케이프된 인용부호 제거 (환경변수에서 문자열로 저장된 경우)
+            defaultPrivateKey = defaultPrivateKey.replace("\\\"", "\"");
+            // 앞뒤 불필요한 인용부호 제거
+            defaultPrivateKey = defaultPrivateKey.trim();
+            if (defaultPrivateKey.startsWith("\"") && defaultPrivateKey.endsWith("\"")) {
+                defaultPrivateKey = defaultPrivateKey.substring(1, defaultPrivateKey.length() - 1);
+            }
         }
     }
 
@@ -74,10 +82,19 @@ public class LabService {
                 ? user.getEmail()
                 : user.getKcUserId();
 
-        // 3. Guacamole 세션 생성 → URL 반환
+        // 3. Guacamole 세션 생성 → connectionId 저장
         try {
-            String iframeUrl = guacamoleService.createGuacSession(guacUsername, labResponse);
+            String connectionId = guacamoleService.createGuacSessionAndGetConnectionId(guacUsername, labResponse);
+            
+            // connectionId를 DB에 저장
+            Lab lab = labRepository.findByUuid(uuid)
+                    .orElseThrow(() -> new IllegalStateException("Lab not found: " + uuid));
+            lab.setGuacamoleConnectionId(connectionId);
+            labRepository.save(lab);
+            log.info("Guacamole connectionId saved to Lab: uuid={}, connectionId={}", uuid, connectionId);
+            
             // 4. 최종 응답 완성
+            String iframeUrl = guacamoleService.buildIframeUrl(connectionId);
             labResponse = labResponse.withGuacamoleUrl(iframeUrl);
         } catch (Exception ex) {
             log.error("Failed to create Guacamole session for uuid {}: {}", uuid, ex.getMessage(), ex);
@@ -96,8 +113,18 @@ public class LabService {
                 response.status(), response.uuid(), response.cveId(), user.getId());
 
         updateDestroyedLab(user, response);
+        
+        // Guacamole connection 삭제 (저장된 connectionId 사용)
         try {
-            guacamoleService.deleteGuacSession(req.uuid());
+            Lab lab = labRepository.findByUuid(req.uuid())
+                    .orElse(null);
+            
+            if (lab != null && lab.getGuacamoleConnectionId() != null && !lab.getGuacamoleConnectionId().isBlank()) {
+                guacamoleService.deleteGuacSession(lab.getGuacamoleConnectionId());
+                log.info("Guacamole connection deleted: uuid={}, connectionId={}", req.uuid(), lab.getGuacamoleConnectionId());
+            } else {
+                log.warn("Lab or Guacamole connectionId not found for uuid: {}", req.uuid());
+            }
         } catch (Exception ex) {
             log.warn("Failed to delete Guacamole session for uuid {}: {}", req.uuid(), ex.getMessage());
         }
@@ -121,7 +148,8 @@ public class LabService {
         String sshUsername = (defaultSshUsername != null && !defaultSshUsername.isBlank())
                 ? defaultSshUsername
                 : "ubuntu";
-        
+
+        // 현재는 사용하지 않음
         String sshPassword = (defaultSshPassword != null && !defaultSshPassword.isBlank())
                 ? defaultSshPassword
                 : null;

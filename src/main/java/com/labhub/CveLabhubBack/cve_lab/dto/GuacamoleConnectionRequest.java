@@ -14,8 +14,7 @@ public record GuacamoleConnectionRequest(
         Map<String, Object> params = new HashMap<>();
         params.put("hostname", response.privateIp());
         params.put("port", "22");
-        params.put("username", (response.sshUsername() != null && !response.sshUsername().isBlank())
-                ? response.sshUsername() : "ubuntu");
+        params.put("username", response.sshUsername());
         if (response.privateKey() != null && !response.privateKey().isBlank()) {
             params.put("private-key", response.privateKey());
         }

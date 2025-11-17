@@ -37,12 +37,12 @@ public class GuacamoleService {
         // 1) guacadmin 토큰 획득
         String adminToken = authTokenService.getAdminToken();
         
-            // Keycloak 사용자가 Guacamole DB에 존재하는지 확인 (없으면 REST API로 생성)
-            guacamoleClient.ensureUserExists(adminToken, username);
+        // Keycloak 사용자가 Guacamole DB에 존재하는지 확인 (없으면 REST API로 생성)
+        guacamoleClient.ensureUserExists(adminToken, username);
 
-            // 2) Connection 생성 (connectionId 반환)
+        // 2) Connection 생성 (connectionId 반환)
         String connectionId = guacamoleClient.createConnection(adminToken, response);
-        
+
         // 3) 권한을 해당 유저에게만 부여 (REST API 사용)
         guacamoleClient.grantConnectionPermission(adminToken, username, connectionId);
         
@@ -52,6 +52,25 @@ public class GuacamoleService {
                 username, connectionId, iframeUrl);
         
         return iframeUrl;
+    }
+
+    /**
+     * Connection ID를 반환하는 메서드 (LabService에서 connectionId 저장용)
+     * 
+     * @param username Guacamole 사용자명
+     * @param response Lab 생성 응답
+     * @return Guacamole connection ID (identifier)
+     */
+    public String createGuacSessionAndGetConnectionId(String username, LabCreateResponse response) {
+        log.info("Creating Guacamole session for user: {}", username);
+        
+        String adminToken = authTokenService.getAdminToken();
+        guacamoleClient.ensureUserExists(adminToken, username);
+        String connectionId = guacamoleClient.createConnection(adminToken, response);
+        guacamoleClient.grantConnectionPermission(adminToken, username, connectionId);
+        
+        log.info("Guacamole session created: username={}, connectionId={}", username, connectionId);
+        return connectionId;
     }
 
     /**
@@ -79,7 +98,7 @@ public class GuacamoleService {
     /**
      * Connection ID로 iframe URL을 생성합니다.
      */
-    private String buildIframeUrl(String connectionId) {
+    public String buildIframeUrl(String connectionId) {
         String baseUrl = guacamoleConfig.getIframeBaseUrl();
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
