@@ -22,11 +22,11 @@ public class RunnerClient {
     private String baseUrl;
 
     public RunResponse create(RunRequest request) {
-        return post("/create", request);
+        return post("/api/labs/create", request);
     }
 
     public RunResponse destroy(RunRequest request) {
-        return post("/destroy", request);
+        return post("/api/labs/destroy", request);
     }
 
     private RunResponse post(String path, RunRequest request) {

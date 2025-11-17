@@ -71,8 +71,8 @@ public class LabService {
         log.info("Terraform runner create response: status={}, uuid={}, cveId={}, userId={}",
                 runnerResponse.status(), runnerResponse.uuid(), runnerResponse.cveId(), user.getId());
 
-        // DB에 Lab 정보 저장
-        persistCreatedLab(user, req.cveId(), runnerResponse);
+        // DB에 Lab 정보 저장 (Lab 객체 반환받음)
+        Lab lab = persistCreatedLab(user, req.cveId(), runnerResponse);
 
         // 2. 초기 응답 생성 (guacamoleUrl = null)
         LabCreateResponse labResponse = toLabCreateResponse(runnerResponse);
@@ -86,9 +86,7 @@ public class LabService {
         try {
             String connectionId = guacamoleService.createGuacSessionAndGetConnectionId(guacUsername, labResponse);
             
-            // connectionId를 DB에 저장
-            Lab lab = labRepository.findByUuid(uuid)
-                    .orElseThrow(() -> new IllegalStateException("Lab not found: " + uuid));
+            // connectionId를 DB에 저장 (이미 조회한 lab 객체 사용)
             lab.setGuacamoleConnectionId(connectionId);
             labRepository.save(lab);
             log.info("Guacamole connectionId saved to Lab: uuid={}, connectionId={}", uuid, connectionId);
@@ -192,7 +190,7 @@ public class LabService {
 
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void persistCreatedLab(UserEntity user, String requestedCveName, RunResponse response) {
+    public Lab persistCreatedLab(UserEntity user, String requestedCveName, RunResponse response) {
         Cve cve = cveRepository.findByName(requestedCveName)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown CVE: " + requestedCveName));
 
@@ -207,7 +205,7 @@ public class LabService {
         lab.setExpiresAt(parseDateTime(outputValue(response, "expires_at")));
         lab.setStatus(LabStatus.from(outputValue(response, "status")));
 
-        labRepository.save(lab);
+        return labRepository.save(lab);
     }
 
 
