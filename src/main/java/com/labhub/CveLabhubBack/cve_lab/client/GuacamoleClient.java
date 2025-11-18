@@ -26,10 +26,10 @@ public class GuacamoleClient {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
      /**
-     * Connection을 생성하고 connectionId를 반환합니다.
+     * Connection을 생성하고 connectionId (identifier)를 반환합니다.
      * @param adminToken Guacamole admin 토큰
      * @param response Lab 생성 응답 (호스트 정보 포함)
-     * @return connectionId (identifier)
+     * @return connectionId (identifier, 예: "62")
      */
     public String createConnection(String adminToken, LabCreateResponse response) {
         String url = UriComponentsBuilder.fromHttpUrl(guacamoleConfig.getBaseUrl())
@@ -64,12 +64,13 @@ public class GuacamoleClient {
             throw new GuacamoleClientException("Failed to create Guacamole connection: " + resp.getStatusCode());
         }
         
-        // connectionId (identifier) 반환
+        // connectionId (identifier) 반환 - URL 접속에 사용됨
         if (body.identifier() == null || body.identifier().isBlank()) {
             throw new GuacamoleClientException("Missing Guacamole connection identifier");
         }
         
-        log.info("Guacamole connection created: connectionId={}", body.identifier());
+        log.info("Guacamole connection created: connectionId={}, name={}", 
+                body.identifier(), request.name());
         return body.identifier();
     }
 
@@ -113,13 +114,12 @@ public class GuacamoleClient {
     }
 
     /**
-     * 특정 사용자에게 Connection 접근 권한을 부여합니다.
-     * PATCH /api/session/data/mysql/users/{username}/permissions?token={adminToken}
-     * Body: [{"op": "add", "path": "/connectionPermissions/{connectionId}", "value": "READ"}]
+     * 특정 사용자에게 Connection 접근 권한을 모두 부여합니다.
+     * ConnectionId (identifier)를 사용합니다.
      * 
      * @param adminToken Guacamole admin 토큰
      * @param username Guacamole 사용자명 (Keycloak의 preferred_username 또는 sub)
-     * @param connectionId Connection ID (identifier)
+     * @param connectionId Connection ID (identifier, 예: "62")
      */
     public void grantConnectionPermission(String adminToken, String username, String connectionId) {
         String url = UriComponentsBuilder.fromHttpUrl(guacamoleConfig.getBaseUrl())
@@ -130,19 +130,19 @@ public class GuacamoleClient {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // PATCH 요청 Body: [{"op": "add", "path": "/connectionPermissions/<connectionId>", "value": "READ"}]
+        // 모든 권한 부여: READ, UPDATE, DELETE, ADMINISTER
+        // connectionId (identifier) 사용
         List<Map<String, Object>> patchOperations = List.of(
-                Map.of(
-                        "op", "add",
-                        "path", "/connectionPermissions/" + connectionId,
-                        "value", "READ"
-                )
+                Map.of("op", "add", "path", "/connectionPermissions/" + connectionId, "value", "READ"),
+                Map.of("op", "add", "path", "/connectionPermissions/" + connectionId, "value", "UPDATE"),
+                Map.of("op", "add", "path", "/connectionPermissions/" + connectionId, "value", "DELETE"),
+                Map.of("op", "add", "path", "/connectionPermissions/" + connectionId, "value", "ADMINISTER")
         );
 
         // 요청 로그 출력
         try {
             String requestJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(patchOperations);
-            log.info("=== Guacamole Permission Grant Request ===");
+            log.info("=== Guacamole Permission Grant Request (All Permissions) ===");
             log.info("URL: {}", url);
             log.info("Username: {}, ConnectionId: {}", username, connectionId);
             log.info("Request Body:\n{}", requestJson);
@@ -161,7 +161,7 @@ public class GuacamoleClient {
             throw new GuacamoleClientException("Failed to grant connection permission: " + response.getStatusCode());
         }
         
-        log.info("Guacamole permission granted: username={}, connectionId={}", username, connectionId);
+        log.info("Guacamole all permissions granted: username={}, connectionId={}", username, connectionId);
     }
 
     /**
@@ -181,5 +181,77 @@ public class GuacamoleClient {
         log.info("Deleting Guacamole connection: connectionId={}", connectionId);
         restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(new HttpHeaders()), Void.class);
         log.info("Guacamole connection deleted: connectionId={}", connectionId);
+    }
+
+    /**
+     * Connection에 연결하여 tunnel identifier를 반환합니다.
+     * 
+     * 정식 API 경로:
+     * POST /api/session/data/{dataSource}/connections/{connectionId}/connect?token={adminToken}
+     * 
+     * 응답 예시:
+     * {
+     *   "identifier": "NTkAYwBteXNxbA"
+     * }
+     * 
+     * @param adminToken Guacamole admin 토큰
+     * @param connectionId Connection ID (identifier)
+     * @return tunnel identifier (예: "NTkAYwBteXNxbA")
+     */
+    public String connectToConnection(String adminToken, String connectionId) {
+        if (connectionId == null || connectionId.isBlank()) {
+            throw new IllegalArgumentException("Connection ID is required");
+        }
+
+        String dataSource = guacamoleConfig.getDataSource();
+        String url = UriComponentsBuilder.fromHttpUrl(guacamoleConfig.getBaseUrl())
+                .path("/api/session/data/")
+                .path(dataSource)
+                .path("/connections/")
+                .path(connectionId)
+                .path("/connect")
+                .queryParam("token", adminToken)
+                .toUriString();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        log.info("Calling connect API: connectionId={}, dataSource={}, url={}", 
+                connectionId, dataSource, url);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    url,
+                    new HttpEntity<>(headers),
+                    Map.class
+            );
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw new GuacamoleClientException(
+                        "Failed to connect to Guacamole connection: " + response.getStatusCode());
+            }
+
+            Map<String, Object> body = response.getBody();
+            String tunnelIdentifier = (String) body.get("identifier");
+            
+            if (tunnelIdentifier == null || tunnelIdentifier.isBlank()) {
+                throw new GuacamoleClientException("Missing tunnel identifier in connect response");
+            }
+
+            log.info("✅ Tunnel identifier obtained: connectionId={}, tunnelIdentifier={}", 
+                    connectionId, tunnelIdentifier);
+            return tunnelIdentifier;
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound ex) {
+            log.error("❌ 404 Not Found - Guacamole connect API endpoint not found: {}", url);
+            log.error("Check if dataSource is correct: {}", dataSource);
+            log.error("Check if connectionId exists: {}", connectionId);
+            log.error("Full error: {}", ex.getResponseBodyAsString());
+            throw new GuacamoleClientException(
+                    "Guacamole connect API endpoint not found (404). URL: " + url, ex);
+        } catch (org.springframework.web.client.RestClientException ex) {
+            log.error("Failed to connect to Guacamole connection {}: {}", connectionId, ex.getMessage(), ex);
+            throw new GuacamoleClientException(
+                    "Failed to connect to Guacamole connection: " + connectionId, ex);
+        }
     }
 }
