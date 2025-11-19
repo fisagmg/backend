@@ -45,19 +45,27 @@ public class LabController {
             @ApiResponse(responseCode = "500", description = "서버 오류")
     })
     public ResponseEntity<LabCreateResponse> create(@RequestBody LabCreateRequest req,
-                                                    @AuthenticationPrincipal Jwt jwt) {
-        if (jwt != null) {
-            log.info("JWT claims: {}", jwt.getClaims());
-            log.info("preferred_username: {}", jwt.getClaimAsString("preferred_username"));
-            log.info("email: {}", jwt.getClaimAsString("email"));
-            log.info("sub: {}", jwt.getClaimAsString("sub"));
-        }
-        
-        String userId = (jwt != null && jwt.hasClaim("sub"))
-                ? jwt.getClaimAsString("sub")
+                                                @AuthenticationPrincipal Jwt jwt) {
+    if (jwt != null) {
+        log.info("JWT claims: {}", jwt.getClaims());
+        log.info("preferred_username: {}", jwt.getClaimAsString("preferred_username"));
+        log.info("email: {}", jwt.getClaimAsString("email"));
+        log.info("sub: {}", jwt.getClaimAsString("sub"));
+    }
+    
+    String userId = (jwt != null && jwt.hasClaim("sub"))
+            ? jwt.getClaimAsString("sub")
+            : null;
+    
+    // preferred_username 추출 (email 또는 username)
+    String preferredUsername = (jwt != null && jwt.hasClaim("preferred_username"))
+            ? jwt.getClaimAsString("preferred_username")
+            : (jwt != null && jwt.hasClaim("email"))
+                ? jwt.getClaimAsString("email")
                 : null;
-        LabCreateResponse response = labService.create(userId, req);
-        return ResponseEntity.ok(response);
+    
+    LabCreateResponse response = labService.create(userId, preferredUsername, req);
+    return ResponseEntity.ok(response);
     }
 
     @PostMapping("/destroy")

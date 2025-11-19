@@ -18,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 
@@ -112,8 +114,8 @@ public class LabSessionService {
         String userId = String.valueOf(lab.getUser().getId());
         awsEc2Service.terminateInstance(uuid, lab.getCveName(), userId);
         
-        // DB 상태 업데이트
-        LocalDateTime terminatedAt = LocalDateTime.now();
+        // DB 상태 업데이트 (Asia/Seoul 사용)
+        LocalDateTime terminatedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
         lab.setStatus(LabStatus.TERMINATED);
         lab.setTerminatedAt(terminatedAt);
         labRepository.save(lab);
@@ -128,7 +130,8 @@ public class LabSessionService {
      */
     @Transactional
     public void terminateExpiredSessions() {
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("UTC"));
+        // Asia/Seoul로 통일
+        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
         List<Lab> expiredLabs = labRepository.findAllByStatusAndExpiresAtBefore(LabStatus.ACTIVE, now);
         
         log.info("Found {} expired lab sessions to terminate", expiredLabs.size());
@@ -171,7 +174,8 @@ public class LabSessionService {
         if (lab.getExpiresAt() == null) {
             return 0;
         }
-        LocalDateTime now = LocalDateTime.now();
+        // Asia/Seoul로 통일하여 비교
+        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
         Duration duration = Duration.between(now, lab.getExpiresAt());
         return Math.max(0, duration.toMinutes());
     }

@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.UUID;
+import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -60,7 +61,7 @@ public class LabService {
         }
     }
 
-    public LabCreateResponse create(String authenticatedUserId, LabCreateRequest req) {
+    public LabCreateResponse create(String authenticatedUserId, String preferredUsername, LabCreateRequest req) {
         // 0. 유저 정보 resolve
         UserEntity user = resolveUser(authenticatedUserId);
         String uuid = UUID.randomUUID().toString();
@@ -77,25 +78,25 @@ public class LabService {
         // 2. 초기 응답 생성 (guacamoleUrl = null)
         LabCreateResponse labResponse = toLabCreateResponse(runnerResponse);
 
-        // Keycloak의 preferred_username이 email이므로 email 사용
-        String guacUsername = (user.getEmail() != null && !user.getEmail().isBlank())
-                ? user.getEmail()
-                : user.getKcUserId();
-
-        // 3. Guacamole 세션 생성 → connectionId 저장
+        // 3. Guacamole connection 생성 → 사용자 생성/권한 부여 → tunnel identifier 획득
         try {
-            String connectionId = guacamoleService.createGuacSessionAndGetConnectionId(guacUsername, labResponse);
+            log.info("Starting Guacamole connection creation for user: {}", preferredUsername);
+            String connectionId = guacamoleService.createConnection(labResponse, preferredUsername);
+            log.info("Guacamole connection created successfully: connectionId={}", connectionId);
             
-            // connectionId를 DB에 저장 (이미 조회한 lab 객체 사용)
+            // connectionId를 DB에 저장
             lab.setGuacamoleConnectionId(connectionId);
             labRepository.save(lab);
             log.info("Guacamole connectionId saved to Lab: uuid={}, connectionId={}", uuid, connectionId);
             
-            // 4. 최종 응답 완성
-            String iframeUrl = guacamoleService.buildIframeUrl(connectionId);
+            // 4. 사용자 토큰으로 tunnel identifier 획득 후 URL 생성
+            log.info("Building iframe URL with tunnel identifier for connectionId: {}", connectionId);
+            String iframeUrl = guacamoleService.buildIframeUrl(connectionId, preferredUsername);
+            log.info("Iframe URL created successfully: {}", iframeUrl);
             labResponse = labResponse.withGuacamoleUrl(iframeUrl);
         } catch (Exception ex) {
-            log.error("Failed to create Guacamole session for uuid {}: {}", uuid, ex.getMessage(), ex);
+            log.error("Failed to create Guacamole connection for uuid {}: {}", uuid, ex.getMessage(), ex);
+            log.error("Exception details: ", ex);
             // Guacamole 실패해도 VM은 생성되었으므로 응답 반환 (guacamoleUrl = null)
         }
 
@@ -202,12 +203,28 @@ public class LabService {
         lab.setInstanceId(requiredOutputValue(response, "instance_id"));
         lab.setRegion(requiredOutputValue(response, "region"));
         lab.setCreatedAt(parseDateTime(requiredOutputValue(response, "created_at")));
-        lab.setExpiresAt(parseDateTime(outputValue(response, "expires_at")));
+        
+        // expires_at 설정: Terraform에서 받은 값이 없거나 null이면 기본값(8시간)으로 설정
+        String expiresAtStr = outputValue(response, "expires_at");
+        LocalDateTime expiresAt = parseDateTime(expiresAtStr);
+        
+        if (expiresAt == null) {
+            LocalDateTime createdAt = lab.getCreatedAt();
+            if (createdAt != null) {
+                expiresAt = createdAt.plusMinutes(480); // 8시간 = 480분
+                log.info("expires_at is null, setting default: {} (createdAt + 480 minutes)", expiresAt);
+            } else {
+                // createdAt도 null이면 현재 시간(Asia/Seoul) 기준으로 설정
+                expiresAt = LocalDateTime.now(ZoneId.of("Asia/Seoul")).plusMinutes(480);
+                log.warn("Both expires_at and createdAt are null, using current Asia/Seoul time + 480 minutes: {}", expiresAt);
+            }
+        }
+        lab.setExpiresAt(expiresAt);
+        
         lab.setStatus(LabStatus.from(outputValue(response, "status")));
 
         return labRepository.save(lab);
     }
-
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateDestroyedLab(UserEntity user, RunResponse response) {
@@ -217,7 +234,7 @@ public class LabService {
             }
             lab.setStatus(LabStatus.from(firstNonBlank(outputValue(response, "status"), response.status())));
             LocalDateTime terminatedAt = parseDateTime(firstNonBlank(outputValue(response, "terminated_at"), null));
-            lab.setTerminatedAt(terminatedAt != null ? terminatedAt : LocalDateTime.now());
+            lab.setTerminatedAt(terminatedAt != null ? terminatedAt : LocalDateTime.now(ZoneId.of("Asia/Seoul")));
             labRepository.save(lab);
         }, () -> log.warn("Lab with uuid {} not found during destroy handling.", response.uuid()));
     }
@@ -246,7 +263,10 @@ public class LabService {
             return null;
         }
         try {
-            return OffsetDateTime.parse(isoDateTime).toLocalDateTime();
+            // OffsetDateTime으로 파싱 후 Asia/Seoul로 변환
+            OffsetDateTime offsetDateTime = OffsetDateTime.parse(isoDateTime);
+            // Asia/Seoul로 변환하여 LocalDateTime으로 변환
+            return offsetDateTime.atZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime();
         } catch (DateTimeParseException ex) {
             log.warn("Failed to parse datetime '{}': {}", isoDateTime, ex.getMessage());
             return null;
