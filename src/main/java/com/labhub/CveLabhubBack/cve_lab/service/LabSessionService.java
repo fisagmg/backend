@@ -39,7 +39,7 @@ public class LabSessionService {
     @Transactional(readOnly = true)
     public LabRemainingTimeResponse getRemainingTime(String uuid) {
         Lab lab = findLabByUuid(uuid);
-        validateNotTerminated(lab);
+        validateActiveOrCreated(lab);
         
         return new LabRemainingTimeResponse(lab.getExpiresAt());
     }
@@ -51,8 +51,8 @@ public class LabSessionService {
     public LabExtendableResponse isExtendable(String uuid) {
         Lab lab = findLabByUuid(uuid);
         
-        // 종료된 세션은 연장 불가
-        if (lab.getStatus() == LabStatus.TERMINATED) {
+        // 완료되거나 취소된 세션은 연장 불가
+        if (lab.getStatus() == LabStatus.COMPLETED || lab.getStatus() == LabStatus.CANCELLED) {
             return new LabExtendableResponse(false, 0, labConfig.getExtendUnitMinutes());
         }
         
@@ -77,7 +77,7 @@ public class LabSessionService {
     @Transactional
     public LabExtendResponse extendLabSession(String uuid) {
         Lab lab = findLabByUuid(uuid);
-        validateNotTerminated(lab);
+        validateActiveOrCreated(lab);
         
         // 연장 가능 여부 검증
         LocalDateTime potentialExpiresAt = lab.getExpiresAt().plusMinutes(labConfig.getExtendUnitMinutes());
@@ -99,34 +99,98 @@ public class LabSessionService {
     }
     
     /**
-     * 실습 종료 (수동)
+     * VM 종료 (수동) - LabStatus는 ACTIVE 유지
      */
     @Transactional
     public LabTerminateResponse terminateLabSession(String uuid) {
         Lab lab = findLabByUuid(uuid);
         
-        // 이미 종료된 세션인지 확인
-        if (lab.getStatus() == LabStatus.TERMINATED) {
-            throw new LabTerminatedException("Lab session already terminated: " + uuid);
+        // 이미 완료/취소/종료된 세션은 재종료 불가
+        if (lab.getStatus() == LabStatus.COMPLETED
+                || lab.getStatus() == LabStatus.CANCELLED
+                || lab.getStatus() == LabStatus.TERMINATED) {
+            throw new LabTerminatedException("Lab session already completed or cancelled: " + uuid);
         }
         
         // AWS EC2 종료
         String userId = String.valueOf(lab.getUser().getId());
         awsEc2Service.terminateInstance(uuid, lab.getCveName(), userId);
         
-        // DB 상태 업데이트 (Asia/Seoul 사용)
+        // DB 상태 업데이트 (LabStatus는 TERMINATED로 변경)
         LocalDateTime terminatedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
         lab.setStatus(LabStatus.TERMINATED);
         lab.setTerminatedAt(terminatedAt);
         labRepository.save(lab);
         
-        log.info("Lab session manually terminated: uuid={}, terminatedAt={}", uuid, terminatedAt);
+        log.info("VM terminated: uuid={}, terminatedAt={}, status=TERMINATED", uuid, terminatedAt);
         
         return new LabTerminateResponse(true, terminatedAt);
     }
     
     /**
+     * 실습 완료 - ACTIVE → COMPLETED, VM 자동 종료
+     */
+    @Transactional
+    public LabTerminateResponse completeLabSession(String uuid) {
+        Lab lab = findLabByUuid(uuid);
+        
+        // ACTIVE 또는 TERMINATED 상태만 완료 가능
+        if (lab.getStatus() != LabStatus.ACTIVE && lab.getStatus() != LabStatus.TERMINATED) {
+            throw new LabTerminatedException("Only ACTIVE or TERMINATED lab sessions can be completed: " + uuid + ", current status: " + lab.getStatus());
+        }
+        
+        // AWS EC2 종료
+        String userId = String.valueOf(lab.getUser().getId());
+        awsEc2Service.terminateInstance(uuid, lab.getCveName(), userId);
+        
+        // DB 상태 업데이트: ACTIVE → COMPLETED
+        LocalDateTime completedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+        lab.setStatus(LabStatus.COMPLETED);
+        lab.setTerminatedAt(completedAt);
+        labRepository.save(lab);
+        
+        log.info("Lab session completed: uuid={}, completedAt={}", uuid, completedAt);
+        
+        return new LabTerminateResponse(true, completedAt);
+    }
+    
+    /**
+     * 실습 취소 - ACTIVE/CREATED → CANCELLED, VM 바로 종료
+     */
+    @Transactional
+    public LabTerminateResponse cancelLabSession(String uuid) {
+        Lab lab = findLabByUuid(uuid);
+        
+        // ACTIVE, CREATED, TERMINATED 상태만 취소 가능
+        if (lab.getStatus() != LabStatus.ACTIVE
+                && lab.getStatus() != LabStatus.CREATED
+                && lab.getStatus() != LabStatus.TERMINATED) {
+            throw new LabTerminatedException("Only ACTIVE, CREATED, or TERMINATED lab sessions can be cancelled: " + uuid + ", current status: " + lab.getStatus());
+        }
+        
+        // AWS EC2 종료
+        String userId = String.valueOf(lab.getUser().getId());
+        try {
+            awsEc2Service.terminateInstance(uuid, lab.getCveName(), userId);
+        } catch (Exception e) {
+            log.warn("Failed to terminate VM during cancellation, but continuing with status update: uuid={}", uuid, e);
+            // VM 종료 실패해도 상태는 CANCELLED로 변경
+        }
+        
+        // DB 상태 업데이트: ACTIVE/CREATED → CANCELLED
+        LocalDateTime cancelledAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+        lab.setStatus(LabStatus.CANCELLED);
+        lab.setTerminatedAt(cancelledAt);
+        labRepository.save(lab);
+        
+        log.info("Lab session cancelled: uuid={}, cancelledAt={}", uuid, cancelledAt);
+        
+        return new LabTerminateResponse(true, cancelledAt);
+    }
+    
+    /**
      * 만료된 세션 자동 종료 (스케줄러용)
+     * ACTIVE 또는 CREATED 상태의 만료된 세션을 CANCELLED로 변경
      */
     @Transactional
     public void terminateExpiredSessions() {
@@ -134,24 +198,32 @@ public class LabSessionService {
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
         List<Lab> expiredLabs = labRepository.findAllByStatusAndExpiresAtBefore(LabStatus.ACTIVE, now);
         
+        // CREATED 상태의 만료된 세션도 조회 (만료 시간이 지났다면)
+        List<Lab> expiredCreatedLabs = labRepository.findAllByStatusAndExpiresAtBefore(LabStatus.CREATED, now);
+        expiredLabs.addAll(expiredCreatedLabs);
+        
         log.info("Found {} expired lab sessions to terminate", expiredLabs.size());
         
         for (Lab lab : expiredLabs) {
             try {
                 // AWS EC2 종료
                 String userId = String.valueOf(lab.getUser().getId());
-                awsEc2Service.terminateInstance(lab.getUuid(), lab.getCveName(), userId);
+                try {
+                    awsEc2Service.terminateInstance(lab.getUuid(), lab.getCveName(), userId);
+                } catch (Exception e) {
+                    log.warn("Failed to terminate VM for expired lab session, but continuing with status update: uuid={}", lab.getUuid(), e);
+                }
                 
-                // DB 상태 업데이트
-                lab.setStatus(LabStatus.TERMINATED);
+                // DB 상태 업데이트: 만료된 세션은 CANCELLED로 변경
+                lab.setStatus(LabStatus.CANCELLED);
                 lab.setTerminatedAt(now);
                 labRepository.save(lab);
                 
-                log.info("Expired lab session terminated: uuid={}, expiresAt={}", 
+                log.info("Expired lab session cancelled: uuid={}, expiresAt={}", 
                         lab.getUuid(), lab.getExpiresAt());
                         
             } catch (Exception e) {
-                log.error("Failed to terminate expired lab session: uuid={}", lab.getUuid(), e);
+                log.error("Failed to cancel expired lab session: uuid={}", lab.getUuid(), e);
                 // 다음 반복으로 계속 진행
             }
         }
@@ -164,9 +236,9 @@ public class LabSessionService {
                 .orElseThrow(() -> new LabNotFoundException(uuid));
     }
     
-    private void validateNotTerminated(Lab lab) {
-        if (lab.getStatus() == LabStatus.TERMINATED) {
-            throw new LabTerminatedException(lab.getUuid());
+    private void validateActiveOrCreated(Lab lab) {
+        if (lab.getStatus() != LabStatus.ACTIVE && lab.getStatus() != LabStatus.CREATED) {
+            throw new LabTerminatedException("Lab session is not active or created: " + lab.getUuid() + ", status: " + lab.getStatus());
         }
     }
     
