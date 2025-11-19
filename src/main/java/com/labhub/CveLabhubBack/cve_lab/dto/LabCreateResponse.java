@@ -4,7 +4,8 @@ package com.labhub.CveLabhubBack.cve_lab.dto;
  * Lab 생성 응답 DTO
  * 
  * 초기 생성 시: guacamoleUrl = null
- * GuacamoleService 완료 후: guacamoleUrl = "https://guac.server/guacamole/#/client/{connectionId}"
+ * GuacamoleService 완료 후: guacamoleUrl = "https://guac.server/guacamole/#/client/c/{connectionId}?token=..."
+ * 주의: 터널용 식별자이므로 Connection ID 앞에 "c/" prefix가 포함됨
  */
 public record LabCreateResponse(
         String uuid,
