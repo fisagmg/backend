@@ -3,14 +3,20 @@ package com.labhub.CveLabhubBack.mypage.service;
 import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
 import com.labhub.CveLabhubBack.auth.service.KeycloakAdminService;
 import com.labhub.CveLabhubBack.auth.entity.UserEntity;
+import com.labhub.CveLabhubBack.mypage.dto.CompletedCveResponse;
 import com.labhub.CveLabhubBack.mypage.dto.PasswordChangeRequest;
 import com.labhub.CveLabhubBack.mypage.dto.UserProfileResponse;
 import com.labhub.CveLabhubBack.mypage.dto.UserUpdateRequest;
+import com.labhub.CveLabhubBack.mypage.entity.DoneCve;
+import com.labhub.CveLabhubBack.mypage.repository.DoneCveRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -19,6 +25,7 @@ public class MypageService {
 
     private final UserRepository userRepository;
     private final KeycloakAdminService keycloakAdminService;
+    private final DoneCveRepository doneCveRepository;
 
     /**
      * 현재 로그인한 사용자 정보 조회
@@ -96,6 +103,25 @@ public class MypageService {
             log.error("비밀번호 변경 실패: userId={}, error={}", user.getKcUserId(), e.getMessage());
             throw new RuntimeException("비밀번호 변경 중 오류가 발생했습니다: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 완료된 CVE 목록 조회
+     */
+    @Transactional(readOnly = true)
+    public List<CompletedCveResponse> getCompletedCves(Jwt jwt) {
+        String email = getEmailFromJwt(jwt);
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다: " + email));
+
+        // Fetch join을 사용하여 CVE 정보도 함께 조회 (N+1 문제 방지)
+        List<DoneCve> doneCves = doneCveRepository.findByUserIdWithCveOrderByFinishedAtDesc(user.getId());
+
+        log.info("완료된 CVE 목록 조회: userId={}, count={}", user.getId(), doneCves.size());
+
+        return doneCves.stream()
+                .map(CompletedCveResponse::fromEntity)
+                .collect(Collectors.toList());
     }
 
     /**

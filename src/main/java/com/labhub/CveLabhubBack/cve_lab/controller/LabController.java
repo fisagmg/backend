@@ -143,12 +143,11 @@ public class LabController {
     }
 
     @PostMapping("/{uuid}/complete")
-    @Operation(summary = "실습 완료", description = "실습을 완료하고 VM을 종료합니다. LabStatus는 COMPLETED로 변경됩니다.")
+    @Operation(summary = "실습 완료", description = "실습을 완료합니다. VM이 있으면 종료하고 lab 테이블을 업데이트하며, VM이 없으면 done_cve 테이블에만 기록됩니다. 어떤 상태든 완료 가능합니다.")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "실습 완료 성공"),
         @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
-        @ApiResponse(responseCode = "409", description = "ACTIVE 상태가 아닌 세션"),
-        @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
+        @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패 (VM이 없는 경우에도 계속 진행)")
     })
     public ResponseEntity<LabTerminateResponse> completeSession(
             @Parameter(description = "Lab 세션 UUID", required = true)
@@ -157,18 +156,4 @@ public class LabController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/{uuid}/cancel")
-    @Operation(summary = "실습 취소", description = "실습을 취소하고 VM을 종료합니다. LabStatus는 CANCELLED로 변경됩니다.")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "실습 취소 성공"),
-        @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
-        @ApiResponse(responseCode = "409", description = "ACTIVE 또는 CREATED 상태가 아닌 세션"),
-        @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
-    })
-    public ResponseEntity<LabTerminateResponse> cancelSession(
-            @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
-        LabTerminateResponse response = labSessionService.cancelLabSession(uuid);
-        return ResponseEntity.ok(response);
-    }
 }

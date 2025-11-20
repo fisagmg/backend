@@ -198,6 +198,7 @@ public class LabService {
         Lab lab = new Lab();
         lab.setUuid(response.uuid());
         lab.setCve(cve);
+        lab.setCveId(cve.getId());
         lab.setUser(user);
         lab.setCveName(firstNonBlank(outputValue(response, "cve_id"), response.cveId()));
         lab.setInstanceId(requiredOutputValue(response, "instance_id"));

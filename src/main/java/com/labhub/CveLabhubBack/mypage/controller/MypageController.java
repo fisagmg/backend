@@ -1,5 +1,6 @@
 package com.labhub.CveLabhubBack.mypage.controller;
 
+import com.labhub.CveLabhubBack.mypage.dto.CompletedCveResponse;
 import com.labhub.CveLabhubBack.mypage.dto.PasswordChangeRequest;
 import com.labhub.CveLabhubBack.mypage.dto.UserProfileResponse;
 import com.labhub.CveLabhubBack.mypage.dto.UserUpdateRequest;
@@ -16,6 +17,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -76,6 +78,20 @@ public class MypageController {
         
         mypageService.changePassword(jwt, request);
         return ResponseEntity.ok(Map.of("message", "비밀번호가 성공적으로 변경되었습니다."));
+    }
+
+    @GetMapping("/completed-cves")
+    @Operation(summary = "완료된 CVE 목록 조회", description = "로그인한 사용자가 완료한 CVE 실습 목록을 조회합니다.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "조회 성공"),
+            @ApiResponse(responseCode = "401", description = "인증 실패"),
+            @ApiResponse(responseCode = "404", description = "사용자를 찾을 수 없음")
+    })
+    public ResponseEntity<List<CompletedCveResponse>> getCompletedCves(
+            @AuthenticationPrincipal Jwt jwt) {
+        log.info("GET /api/mypage/completed-cves - 완료된 CVE 목록 조회 요청");
+        List<CompletedCveResponse> response = mypageService.getCompletedCves(jwt);
+        return ResponseEntity.ok(response);
     }
 }
 
