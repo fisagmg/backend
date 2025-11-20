@@ -221,7 +221,8 @@ public class LabService {
         }
         lab.setExpiresAt(expiresAt);
         
-        lab.setStatus(LabStatus.from(outputValue(response, "status")));
+        // VM 생성 완료 시 ACTIVE로 설정
+        lab.setStatus(LabStatus.ACTIVE);
 
         return labRepository.save(lab);
     }
@@ -232,7 +233,8 @@ public class LabService {
             if (!lab.getUser().getId().equals(user.getId())) {
                 log.warn("User {} attempted to terminate lab {} owned by {}", user.getId(), lab.getUuid(), lab.getUser().getId());
             }
-            lab.setStatus(LabStatus.from(firstNonBlank(outputValue(response, "status"), response.status())));
+            // VM 종료 시 LabStatus는 변경하지 않음 (ACTIVE 유지 또는 기존 상태 유지)
+            // terminatedAt만 업데이트
             LocalDateTime terminatedAt = parseDateTime(firstNonBlank(outputValue(response, "terminated_at"), null));
             lab.setTerminatedAt(terminatedAt != null ? terminatedAt : LocalDateTime.now(ZoneId.of("Asia/Seoul")));
             labRepository.save(lab);

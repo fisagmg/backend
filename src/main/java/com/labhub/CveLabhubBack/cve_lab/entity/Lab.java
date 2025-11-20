@@ -26,8 +26,8 @@ public class Lab {
     private String uuid;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private LabStatus status = LabStatus.ACTIVE;
+    @Column(nullable = false, length = 20)
+    private LabStatus status = LabStatus.CREATED;
 
     @Column(name = "guacamole_connection_id", length = 255)
     private String guacamoleConnectionId;

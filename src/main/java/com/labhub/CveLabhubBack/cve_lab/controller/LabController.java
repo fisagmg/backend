@@ -128,17 +128,47 @@ public class LabController {
     }
 
     @PostMapping("/{uuid}/terminate")
-    @Operation(summary = "실습 수동 종료", description = "Lab 세션을 수동으로 종료합니다.")
+    @Operation(summary = "VM 종료", description = "VM만 종료하고 LabStatus는 ACTIVE로 유지합니다.")
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "종료 성공"),
+        @ApiResponse(responseCode = "200", description = "VM 종료 성공"),
         @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
-        @ApiResponse(responseCode = "409", description = "이미 종료된 세션"),
+        @ApiResponse(responseCode = "409", description = "이미 완료되거나 취소된 세션"),
         @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
     })
     public ResponseEntity<LabTerminateResponse> terminateSession(
             @Parameter(description = "Lab 세션 UUID", required = true)
             @PathVariable String uuid) {
         LabTerminateResponse response = labSessionService.terminateLabSession(uuid);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{uuid}/complete")
+    @Operation(summary = "실습 완료", description = "실습을 완료하고 VM을 종료합니다. LabStatus는 COMPLETED로 변경됩니다.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "실습 완료 성공"),
+        @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
+        @ApiResponse(responseCode = "409", description = "ACTIVE 상태가 아닌 세션"),
+        @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
+    })
+    public ResponseEntity<LabTerminateResponse> completeSession(
+            @Parameter(description = "Lab 세션 UUID", required = true)
+            @PathVariable String uuid) {
+        LabTerminateResponse response = labSessionService.completeLabSession(uuid);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{uuid}/cancel")
+    @Operation(summary = "실습 취소", description = "실습을 취소하고 VM을 종료합니다. LabStatus는 CANCELLED로 변경됩니다.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "실습 취소 성공"),
+        @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
+        @ApiResponse(responseCode = "409", description = "ACTIVE 또는 CREATED 상태가 아닌 세션"),
+        @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
+    })
+    public ResponseEntity<LabTerminateResponse> cancelSession(
+            @Parameter(description = "Lab 세션 UUID", required = true)
+            @PathVariable String uuid) {
+        LabTerminateResponse response = labSessionService.cancelLabSession(uuid);
         return ResponseEntity.ok(response);
     }
 }
