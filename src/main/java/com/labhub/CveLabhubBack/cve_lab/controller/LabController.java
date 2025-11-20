@@ -143,7 +143,6 @@ public class LabController {
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "실습 완료 성공"),
         @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
-        @ApiResponse(responseCode = "409", description = "ACTIVE 상태가 아닌 세션"),
         @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
     })
     public ResponseEntity<LabTerminateResponse> completeSession(
@@ -152,4 +151,5 @@ public class LabController {
         LabTerminateResponse response = labSessionService.completeLabSession(uuid);
         return ResponseEntity.ok(response);
     }
+
 }

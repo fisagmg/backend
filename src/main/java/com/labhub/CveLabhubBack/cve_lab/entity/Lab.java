@@ -27,14 +27,17 @@ public class Lab {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private LabStatus status;
+    private LabStatus status = LabStatus.ACTIVE;
 
     @Column(name = "guacamole_connection_id", length = 255)
     private String guacamoleConnectionId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "cve_id", nullable = false)
+    @JoinColumn(name = "cve_id", nullable = false, insertable = false, updatable = false)
     private Cve cve;
+
+    @Column(name = "cve_id", nullable = false, insertable = true, updatable = true)
+    private Integer cveId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
@@ -60,21 +63,21 @@ public class Lab {
 
     @Column(name = "max_ttl_minutes")
     private Integer maxTtlMinutes = 120;
-    
+
     /**
      * TTL 만료 여부 확인
      */
     public boolean isExpired(LocalDateTime now) {
         return expiresAt != null && expiresAt.isBefore(now);
     }
-    
+
     /**
      * 종료 가능 여부 확인 (TERMINATED 상태는 종료 불가)
      */
     public boolean isTerminatable() {
         return status == LabStatus.ACTIVE;
     }
-    
+
     /**
      * VM 종료 처리
      */
