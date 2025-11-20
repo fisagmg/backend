@@ -27,14 +27,17 @@ public class Lab {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private LabStatus status = LabStatus.CREATED;
+    private LabStatus status = LabStatus.ACTIVE;
 
     @Column(name = "guacamole_connection_id", length = 255)
     private String guacamoleConnectionId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "cve_id", nullable = false)
+    @JoinColumn(name = "cve_id", nullable = false, insertable = false, updatable = false)
     private Cve cve;
+
+    @Column(name = "cve_id", nullable = false, insertable = true, updatable = true)
+    private Integer cveId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
