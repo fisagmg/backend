@@ -27,7 +27,7 @@ public class Lab {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private LabStatus status = LabStatus.CREATED;
+    private LabStatus status;
 
     @Column(name = "guacamole_connection_id", length = 255)
     private String guacamoleConnectionId;
@@ -60,4 +60,29 @@ public class Lab {
 
     @Column(name = "max_ttl_minutes")
     private Integer maxTtlMinutes = 120;
+    
+    /**
+     * TTL 만료 여부 확인
+     */
+    public boolean isExpired(LocalDateTime now) {
+        return expiresAt != null && expiresAt.isBefore(now);
+    }
+    
+    /**
+     * 종료 가능 여부 확인 (TERMINATED 상태는 종료 불가)
+     */
+    public boolean isTerminatable() {
+        return status == LabStatus.ACTIVE;
+    }
+    
+    /**
+     * VM 종료 처리
+     */
+    public void terminate(LocalDateTime terminatedAt) {
+        if (!isTerminatable()) {
+            throw new IllegalStateException("Lab is already terminated: " + uuid);
+        }
+        this.status = LabStatus.TERMINATED;
+        this.terminatedAt = terminatedAt;
+    }
 }

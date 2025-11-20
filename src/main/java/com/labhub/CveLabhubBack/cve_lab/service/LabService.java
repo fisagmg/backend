@@ -221,7 +221,7 @@ public class LabService {
         }
         lab.setExpiresAt(expiresAt);
         
-        // VM 생성 완료 시 ACTIVE로 설정
+        // VM 생성 완료 시 바로 ACTIVE로 설정
         lab.setStatus(LabStatus.ACTIVE);
 
         return labRepository.save(lab);
