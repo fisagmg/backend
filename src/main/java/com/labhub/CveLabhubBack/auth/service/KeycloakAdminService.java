@@ -96,6 +96,99 @@ public class KeycloakAdminService {
         rt.exchange(url, HttpMethod.PUT, new HttpEntity<>(List.of("VERIFY_EMAIL"), h), Void.class);
     }
 
+    /**
+     * Keycloak 사용자 정보 업데이트
+     * email은 Keycloak에서 필수 필드이므로 반드시 포함해야 함
+     */
+    public void updateUser(String userId, String email, String firstName, String lastName, String phone) {
+        String token = getServiceToken();
+        String url = BASE_URL + "/admin/realms/" + REALM + "/users/" + userId;
+
+        String payload = """
+        {
+          "email": "%s",
+          "firstName": "%s",
+          "lastName": "%s",
+          "emailVerified": true,
+          "attributes": { "phone": ["%s"] }
+        }
+        """.formatted(
+                nullToEmpty(email),
+                nullToEmpty(firstName),
+                nullToEmpty(lastName),
+                nullToEmpty(phone)
+        );
+
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_JSON);
+        h.setBearerAuth(token);
+
+        try {
+            rt.exchange(url, HttpMethod.PUT, new HttpEntity<>(payload, h), Void.class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 404) {
+                throw new RuntimeException("Keycloak 사용자를 찾을 수 없습니다: " + userId);
+            }
+            throw new RuntimeException("Keycloak 사용자 정보 업데이트 실패: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Keycloak 사용자 비밀번호 변경
+     */
+    public void changePassword(String userId, String newPassword) {
+        String token = getServiceToken();
+        String url = BASE_URL + "/admin/realms/" + REALM + "/users/" + userId + "/reset-password";
+
+        String payload = """
+        {
+          "type": "password",
+          "value": "%s",
+          "temporary": false
+        }
+        """.formatted(newPassword);
+
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_JSON);
+        h.setBearerAuth(token);
+
+        try {
+            rt.exchange(url, HttpMethod.PUT, new HttpEntity<>(payload, h), Void.class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 404) {
+                throw new RuntimeException("Keycloak 사용자를 찾을 수 없습니다: " + userId);
+            }
+            throw new RuntimeException("Keycloak 비밀번호 변경 실패: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 현재 비밀번호 검증 (로그인 시도로 검증)
+     */
+    public boolean verifyPassword(String email, String password) {
+        try {
+            String url = BASE_URL + "/realms/" + REALM + "/protocol/openid-connect/token";
+            
+            MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+            form.add("grant_type", "password");
+            form.add("client_id", CLIENT_ID);
+            form.add("client_secret", CLIENT_SECRET);
+            form.add("username", email);
+            form.add("password", password);
+
+            HttpHeaders h = new HttpHeaders();
+            h.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+            rt.postForEntity(url, new HttpEntity<>(form, h), String.class);
+            return true; // 로그인 성공 = 비밀번호 일치
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 401) {
+                return false; // 인증 실패 = 비밀번호 불일치
+            }
+            throw new RuntimeException("비밀번호 검증 중 오류 발생: " + e.getMessage(), e);
+        }
+    }
+
     // 만약 null로 값이 들어오면 ""로 변경, JSON 구조 깨지는 위험 방지
     private String nullToEmpty(String v) { return v == null ? "" : v; }
 }
