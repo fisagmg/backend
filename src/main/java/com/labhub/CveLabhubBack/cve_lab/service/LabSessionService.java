@@ -21,9 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 
 
@@ -37,7 +35,7 @@ public class LabSessionService {
     private final CveRepository cveRepository;
     private final LabConfig labConfig;
     private final DoneCveRepository doneCveRepository;
-    
+
     /**
      * 실습 잔여시간 조회
      */
@@ -104,7 +102,7 @@ public class LabSessionService {
     }
     
     /**
-     * VM 종료 (수동) - LabStatus는 ACTIVE 유지
+     * VM 종료 (수동) - 보고서 작성은 가능
      */
     @Transactional
     public LabTerminateResponse terminateLabSession(String uuid) {
@@ -119,22 +117,18 @@ public class LabSessionService {
         String userId = String.valueOf(lab.getUser().getId());
         awsEc2Service.terminateInstance(uuid, lab.getCveName(), userId);
         
-        // DB 상태 업데이트 (LabStatus는 TERMINATED로 변경)
+        // 종료 처리
         LocalDateTime terminatedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
-        lab.setStatus(LabStatus.TERMINATED);
-        lab.setTerminatedAt(terminatedAt);
+        lab.terminate(terminatedAt);
         labRepository.save(lab);
         
-        log.info("VM terminated: uuid={}, terminatedAt={}, status=TERMINATED", uuid, terminatedAt);
+        log.info("VM terminated: uuid={}, terminatedAt={}", uuid, terminatedAt);
         
         return new LabTerminateResponse(true, terminatedAt);
     }
     
     /**
-     * 실습 완료 - 어떤 상태든 완료 가능 (done_cve에 기록)
-     * - ACTIVE 상태: VM 종료 시도 후 TERMINATED로 변경하고 lab 테이블 업데이트
-     * - TERMINATED 상태 또는 VM이 없는 경우: lab 테이블 업데이트 없이 done_cve만 저장
-     * - 완료 여부는 done_cve 테이블로 구분
+     * 실습 완료 - VM 종료 + 마이페이지 기록
      */
     @Transactional
     public LabTerminateResponse completeLabSession(String uuid) {
@@ -146,7 +140,7 @@ public class LabSessionService {
 
         Long userId = lab.getUser().getId();
         LocalDateTime finishedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
-        
+
         // VM 종료 시도 (실패해도 계속 진행)
         boolean vmTerminated = false;
         if (lab.getStatus() == LabStatus.ACTIVE) {
@@ -168,24 +162,25 @@ public class LabSessionService {
             labRepository.save(lab);
             log.info("Lab table updated: uuid={}, status=TERMINATED", uuid);
         }
-        
+
         // done_cve 테이블에 완료 기록 추가 (또는 업데이트) - 항상 저장
         // CVE 테이블에서 직접 조회하여 cveId 가져오기
         Integer cveId = cveRepository.findByName(lab.getCveName())
                 .orElseThrow(() -> new IllegalStateException("CVE not found in CVE table: " + lab.getCveName()))
                 .getId();
         
+        log.info("Lab session completed: uuid={}, terminatedAt={}", uuid, terminatedAt);
         DoneCve doneCve = doneCveRepository.findByUserIdAndCveId(userId, cveId)
                 .orElse(new DoneCve());
-        
+
         doneCve.setUserId(userId);
         doneCve.setCveId(cveId);
         doneCve.setFinishedAt(finishedAt);
         doneCveRepository.save(doneCve);
-        
-        log.info("Lab session completed: uuid={}, finishedAt={}, doneCve saved: userId={}, cveId={}", 
+
+        log.info("Lab session completed: uuid={}, finishedAt={}, doneCve saved: userId={}, cveId={}",
                 uuid, finishedAt, userId, cveId);
-        
+
         return new LabTerminateResponse(true, finishedAt);
     }
     
@@ -197,6 +192,8 @@ public class LabSessionService {
     public void terminateExpiredSessions() {
         // Asia/Seoul로 통일
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+
+        // ACTIVE 상태이면서 만료된 세션 조회
         List<Lab> expiredLabs = labRepository.findAllByStatusAndExpiresAtBefore(LabStatus.ACTIVE, now);
         
         log.info("Found {} expired lab sessions to terminate", expiredLabs.size());
@@ -205,6 +202,7 @@ public class LabSessionService {
             try {
                 // AWS EC2 종료
                 String userId = String.valueOf(lab.getUser().getId());
+
                 try {
                     awsEc2Service.terminateInstance(lab.getUuid(), lab.getCveName(), userId);
                 } catch (Exception e) {
@@ -212,18 +210,25 @@ public class LabSessionService {
                 }
                 
                 // DB 상태 업데이트: 만료된 세션은 TERMINATED로 변경
-                lab.setStatus(LabStatus.TERMINATED);
+                lab.terminate(now);
                 lab.setTerminatedAt(now);
                 labRepository.save(lab);
-                
-                log.info("Expired lab session terminated: uuid={}, expiresAt={}", 
+
+                log.info("Expired lab session terminated: uuid={}, expiresAt={}",
                         lab.getUuid(), lab.getExpiresAt());
-                        
+
+                } catch (Exception destroyEx) {
+                    log.error("Failed to destroy expired lab: uuid={}. Will retry next schedule.",
+                        lab.getUuid(), destroyEx);
+                }
+
             } catch (Exception e) {
                 log.error("Failed to terminate expired lab session: uuid={}", lab.getUuid(), e);
                 // 다음 반복으로 계속 진행
             }
         }
+
+        log.info("Completed processing {} expired lab sessions", expiredLabs.size());
     }
     
     // === Helper Methods ===
@@ -235,7 +240,9 @@ public class LabSessionService {
     
     private void validateActive(Lab lab) {
         if (lab.getStatus() != LabStatus.ACTIVE) {
-            throw new LabTerminatedException("Lab session is not active: " + lab.getUuid() + ", status: " + lab.getStatus());
+            throw new LabTerminatedException(
+                "Lab session is not active: " + lab.getUuid()
+                + ", status: " + lab.getStatus());
         }
     }
     
