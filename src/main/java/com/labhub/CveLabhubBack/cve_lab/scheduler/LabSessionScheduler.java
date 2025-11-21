@@ -1,6 +1,6 @@
 package com.labhub.CveLabhubBack.cve_lab.scheduler;
 
-import com.labhub.CveLabhubBack.cve_lab.service.LabSessionService;
+import com.labhub.CveLabhubBack.cve_lab.service.LabService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class LabSessionScheduler {
     
-    private final LabSessionService labSessionService;
+    private final LabService labService;
     
     /**
      * TTL 만료된 실습 세션 자동 종료
@@ -32,7 +32,7 @@ public class LabSessionScheduler {
         log.info("=== Starting TTL-based Lab session auto-termination scheduler ===");
         
         try {
-            labSessionService.terminateExpiredSessions();
+            labService.terminateExpiredSessions();
             log.info("=== Completed TTL-based Lab session auto-termination scheduler ===");
         } catch (Exception e) {
             log.error("=== Error in TTL-based Lab session auto-termination scheduler ===", e);
@@ -40,4 +40,3 @@ public class LabSessionScheduler {
         }
     }
 }
-

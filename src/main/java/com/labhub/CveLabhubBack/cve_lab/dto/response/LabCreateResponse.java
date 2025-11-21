@@ -1,15 +1,15 @@
-package com.labhub.CveLabhubBack.cve_lab.dto;
+package com.labhub.CveLabhubBack.cve_lab.dto.response;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * Lab 생성 응답 DTO
- * 
  * 초기 생성 시: guacamoleUrl = null
  * GuacamoleService 완료 후: guacamoleUrl = "https://guac.server/guacamole/#/client/c/{connectionId}?token=..."
  * 주의: 터널용 식별자이므로 Connection ID 앞에 "c/" prefix가 포함됨
  */
 public record LabCreateResponse(
         String uuid,
-        String cveId,
+        @JsonProperty("cveId") String cveName,
         String privateIp,
         String hostname,
         String instanceId,
@@ -20,14 +20,14 @@ public record LabCreateResponse(
         String sshPassword,        // 환경변수 (선택적, null 가능)
         String privateKey         // 환경변수에서 항상 가져옴
 ) {
-    /**
-     * Guacamole URL을 추가한 새로운 LabCreateResponse를 반환합니다.
-     */
+
+    // Guacamole URL을 추가한 새로운 LabCreateResponse를 반환
     public LabCreateResponse withGuacamoleUrl(String url) {
         return new LabCreateResponse(
-                uuid, cveId, privateIp, hostname, instanceId,
+                uuid, cveName, privateIp, hostname, instanceId,
                 status, tfstatePath, url,
                 sshUsername, sshPassword, privateKey
         );
     }
 }
+
