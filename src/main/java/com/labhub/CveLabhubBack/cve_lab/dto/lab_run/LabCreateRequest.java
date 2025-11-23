@@ -1,4 +1,4 @@
-package com.labhub.CveLabhubBack.cve_lab.dto.request;
+package com.labhub.CveLabhubBack.cve_lab.dto.lab_run;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

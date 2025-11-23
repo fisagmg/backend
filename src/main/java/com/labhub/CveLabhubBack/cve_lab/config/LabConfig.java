@@ -13,5 +13,8 @@ public class LabConfig {
     
     @Value("${lab.extend-unit-minutes:30}")
     private int extendUnitMinutes;
+    
+    @Value("${lab.initial-ttl-minutes:60}")
+    private int initialTtlMinutes;
 }
 

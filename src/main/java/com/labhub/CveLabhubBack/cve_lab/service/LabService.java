@@ -6,21 +6,20 @@ import com.labhub.CveLabhubBack.cve.repository.CveRepository;
 import com.labhub.CveLabhubBack.cve_lab.client.RunnerClient;
 import com.labhub.CveLabhubBack.cve.entity.Cve;
 import com.labhub.CveLabhubBack.cve_lab.config.LabConfig;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabCreateResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabExtendableResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabExtendResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabRemainingTimeResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabTerminateResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.LabCreateResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabExtendableResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabExtendResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabRemainingTimeResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabTerminateResponse;
 import com.labhub.CveLabhubBack.cve_lab.entity.Lab;
 import com.labhub.CveLabhubBack.cve_lab.entity.LabStatus;
-import com.labhub.CveLabhubBack.cve_lab.dto.request.LabCreateRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.request.RunRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.RunResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.LabCreateRequest;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunRequest;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunResponse;
 import com.labhub.CveLabhubBack.cve_lab.exception.LabExtensionNotAllowedException;
 import com.labhub.CveLabhubBack.cve_lab.exception.LabNotFoundException;
 import com.labhub.CveLabhubBack.cve_lab.exception.LabTerminatedException;
 import com.labhub.CveLabhubBack.cve_lab.repository.LabRepository;
-import com.labhub.CveLabhubBack.cve_lab.service.GuacamoleService;
 import com.labhub.CveLabhubBack.mypage.entity.DoneCve;
 import com.labhub.CveLabhubBack.mypage.repository.DoneCveRepository;
 import lombok.RequiredArgsConstructor;
@@ -116,7 +115,7 @@ public class LabService {
         return labResponse;
     }
 
-
+    /** VM 종료 */
     @Transactional
     public RunResponse destroy(String kcUserId, RunRequest req) {
         UserEntity user = findDatabaseUser(kcUserId);
@@ -138,10 +137,10 @@ public class LabService {
 
         // 4. DB 상태 업데이트 (status → TERMINATED, terminatedAt 설정)
         updateDestroyedLab(user, response);
-        
+
         // 5. Guacamole connection 삭제
         guacamoleService.deleteConnectionForLab(lab);
-        
+
         return response;
     }
 
@@ -164,6 +163,7 @@ public class LabService {
             try {
                 // VM 삭제 (Terraform Runner 호출)
                 RunRequest request = new RunRequest(uuid, lab.getCveName(), String.valueOf(userId));
+                // destroy 컨트롤러 호출
                 runnerClient.destroy(request);
                 vmTerminated = true;
                 log.info("VM terminated for completion: uuid={}", uuid);
@@ -181,6 +181,7 @@ public class LabService {
             labRepository.save(lab);
         }
 
+        // done_cve 추가
         Integer cveId = cveRepository.findByName(lab.getCveName())
                 .orElseThrow(() -> new IllegalStateException("CVE not found: " + lab.getCveName()))
                 .getId();
@@ -199,7 +200,7 @@ public class LabService {
 
     /**
      * RunResponse를 LabCreateResponse로 변환
-     * 
+     *
      * 초기 생성 시 guacamoleUrl은 null로 설정
      * SSH 접속 정보는 환경변수에서만 가져옴 (Terraform 응답에는 없음)
      */
@@ -208,7 +209,7 @@ public class LabService {
         String hostname = firstNonBlank(outputValue(response, "hostname"), privateIp);
         String instanceId = requiredOutputValue(response, "instance_id");
         String status = firstNonBlank(outputValue(response, "status"), response.status());
-        
+
         // SSH 접속 정보는 환경변수에서만 가져옴 (Terraform runner 응답에는 없음)
         String sshUsername = (defaultSshUsername != null && !defaultSshUsername.isBlank())
                 ? defaultSshUsername
@@ -218,7 +219,7 @@ public class LabService {
         String sshPassword = (defaultSshPassword != null && !defaultSshPassword.isBlank())
                 ? defaultSshPassword
                 : null;
-        
+
         // privateKey는 항상 환경변수에서 가져옴
         String privateKey = (defaultPrivateKey != null && !defaultPrivateKey.isBlank())
                 ? defaultPrivateKey
@@ -260,19 +261,22 @@ public class LabService {
         lab.setInstanceId(requiredOutputValue(response, "instance_id"));
         lab.setRegion(requiredOutputValue(response, "region"));
         lab.setCreatedAt(parseDateTime(requiredOutputValue(response, "created_at")));
-        
-        // expires_at 설정
-        String expiresAtStr = outputValue(response, "expires_at");
-        LocalDateTime expiresAt = parseDateTime(expiresAtStr); // 지역 Asia/Seoul로 확실하게 맞추기
 
-        // 반환값이 없을 경우 수동으로 등록
-        if (expiresAt == null) {
-            LocalDateTime createdAt = lab.getCreatedAt();
-            expiresAt = LocalDateTime.now(ZoneId.of("Asia/Seoul")).plusMinutes(480);
+        // expires_at 설정 - 항상 application.properties의 설정값 사용
+        // Terraform 응답의 expires_at은 무시하고 일관된 시간 정책 적용
+        LocalDateTime createdAt = lab.getCreatedAt();
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+            lab.setCreatedAt(createdAt);
         }
 
+        // application.properties의 lab.initial-ttl-minutes 설정값을 항상 사용
+        LocalDateTime expiresAt = createdAt.plusMinutes(labConfig.getInitialTtlMinutes());
+        log.info("Setting expires_at using initial TTL from config: {} minutes (createdAt: {}, expiresAt: {})",
+                labConfig.getInitialTtlMinutes(), createdAt, expiresAt);
+
         lab.setExpiresAt(expiresAt);
-        
+
         // VM 생성 완료 시 바로 ACTIVE로 설정
         lab.setStatus(LabStatus.ACTIVE);
 
@@ -339,8 +343,6 @@ public class LabService {
         }
         return null;
     }
-
-    // ===== Lab Session Management Methods =====
 
     /** 실습 잔여시간 조회 */
     @Transactional(readOnly = true)

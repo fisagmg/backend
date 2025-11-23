@@ -1,7 +1,7 @@
 package com.labhub.CveLabhubBack.cve_lab.client;
 
-import com.labhub.CveLabhubBack.cve_lab.dto.request.RunRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.RunResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunRequest;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunResponse;
 import com.labhub.CveLabhubBack.cve_lab.exception.RunnerClientException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;

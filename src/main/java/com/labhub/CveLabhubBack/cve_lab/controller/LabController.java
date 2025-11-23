@@ -1,13 +1,13 @@
 package com.labhub.CveLabhubBack.cve_lab.controller;
 
-import com.labhub.CveLabhubBack.cve_lab.dto.request.LabCreateRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabCreateResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.request.RunRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.RunResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabExtendableResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabExtendResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabRemainingTimeResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabTerminateResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.LabCreateRequest;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.LabCreateResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunRequest;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabExtendableResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabExtendResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabRemainingTimeResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabTerminateResponse;
 import com.labhub.CveLabhubBack.cve_lab.service.LabService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,8 +20,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import lombok.extern.slf4j.Slf4j;
-
-
 
 @RestController
 @RequestMapping("/api/labs")
@@ -48,31 +46,27 @@ public class LabController {
         log.info("sub: {}", jwt.getClaimAsString("sub"));
     }
 
-    // 로그인 안 된 상태 (jwt == null) → 401
+    // 로그인 안 된 상태
     if (jwt == null) {
         return ResponseEntity.status(401)
                 .body("로그인이 필요합니다.");
     }
-
-    // kcUserId 추출 실패 → 400
+    // kcUserId 추출 실패
     String kcUserId = (jwt.hasClaim("sub"))
             ? jwt.getClaimAsString("sub")
             : null;
-
     if (kcUserId == null) {
         return ResponseEntity.badRequest()
                 .body("유효하지 않은 사용자입니다.");
     }
 
-    // email 추출
     String userEmail = (jwt != null && jwt.hasClaim("email"))
             ? jwt.getClaimAsString("email")
             : null;
     
     LabCreateResponse response = labService.create(kcUserId, userEmail, req);
 
-    // 성공 → 201 Created
-        return ResponseEntity.status(201).body(response);
+    return ResponseEntity.status(201).body(response);
     }
 
     @PostMapping("/destroy")
@@ -101,7 +95,7 @@ public class LabController {
     })
     public ResponseEntity<LabTerminateResponse> completeSession(
             @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
+            @PathVariable("uuid") String uuid) {
         LabTerminateResponse response = labService.completeLabSession(uuid);
         return ResponseEntity.ok(response);
     }
@@ -115,7 +109,7 @@ public class LabController {
     })
     public ResponseEntity<LabRemainingTimeResponse> getRemainingTime(
             @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
+            @PathVariable("uuid") String uuid) {
         LabRemainingTimeResponse response = labService.getRemainingTime(uuid);
         return ResponseEntity.ok(response);
     }
@@ -128,7 +122,7 @@ public class LabController {
     })
     public ResponseEntity<LabExtendableResponse> checkExtendable(
             @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
+            @PathVariable("uuid") String uuid) {
         LabExtendableResponse response = labService.isExtendable(uuid);
         return ResponseEntity.ok(response);
     }
@@ -143,7 +137,7 @@ public class LabController {
     })
     public ResponseEntity<LabExtendResponse> extendSession(
             @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
+            @PathVariable("uuid") String uuid) {
         LabExtendResponse response = labService.extendLabSession(uuid);
         return ResponseEntity.ok(response);
     }

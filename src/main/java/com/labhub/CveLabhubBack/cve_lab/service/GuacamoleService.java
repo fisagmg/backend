@@ -2,7 +2,7 @@ package com.labhub.CveLabhubBack.cve_lab.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labhub.CveLabhubBack.cve_lab.config.GuacamoleConfig;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabCreateResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.LabCreateResponse;
 import com.labhub.CveLabhubBack.cve_lab.entity.Lab;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
