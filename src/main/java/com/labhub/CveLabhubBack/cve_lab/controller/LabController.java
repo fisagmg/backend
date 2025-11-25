@@ -1,15 +1,14 @@
 package com.labhub.CveLabhubBack.cve_lab.controller;
 
-import com.labhub.CveLabhubBack.cve_lab.dto.LabCreateRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.LabCreateResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.RunRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.RunResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabExtendableResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabExtendResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabRemainingTimeResponse;
-import com.labhub.CveLabhubBack.cve_lab.dto.response.LabTerminateResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.LabCreateRequest;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.LabCreateResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunRequest;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabExtendableResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabExtendResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabRemainingTimeResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_time.LabTerminateResponse;
 import com.labhub.CveLabhubBack.cve_lab.service.LabService;
-import com.labhub.CveLabhubBack.cve_lab.service.LabSessionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -20,9 +19,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-import lombok.extern.slf4j.Slf4j;  // 추가
+import lombok.extern.slf4j.Slf4j;
 
-
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/labs")
@@ -31,16 +30,16 @@ import lombok.extern.slf4j.Slf4j;  // 추가
 @Tag(name = "Lab Session API", description = "실습 세션 생성 및 시간 관리 API")
 public class LabController {
     private final LabService labService;
-    private final LabSessionService labSessionService;
 
     @PostMapping("/create")
     @Operation(summary = "실습 환경 생성", description = "새로운 Lab 실습 환경을 생성합니다.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "실습 환경 생성 성공"),
-            @ApiResponse(responseCode = "400", description = "잘못된 요청"),
+            @ApiResponse(responseCode = "201", description = "실습 환경 생성 성공"),
+            @ApiResponse(responseCode = "400", description = "유효하지 않은 사용자 또는 잘못된 요청"),
+            @ApiResponse(responseCode = "401", description = "로그인이 필요함"),
             @ApiResponse(responseCode = "500", description = "서버 오류")
     })
-    public ResponseEntity<LabCreateResponse> create(@RequestBody LabCreateRequest req,
+    public ResponseEntity<?> create(@RequestBody LabCreateRequest req,
                                                 @AuthenticationPrincipal Jwt jwt) {
     if (jwt != null) {
         log.info("JWT claims: {}", jwt.getClaims());
@@ -48,20 +47,28 @@ public class LabController {
         log.info("email: {}", jwt.getClaimAsString("email"));
         log.info("sub: {}", jwt.getClaimAsString("sub"));
     }
-    
-    String userId = (jwt != null && jwt.hasClaim("sub"))
+
+    // 로그인 안 된 상태
+    if (jwt == null) {
+        return ResponseEntity.status(401)
+                .body("로그인이 필요합니다.");
+    }
+    // kcUserId 추출 실패
+    String kcUserId = (jwt.hasClaim("sub"))
             ? jwt.getClaimAsString("sub")
             : null;
+    if (kcUserId == null) {
+        return ResponseEntity.badRequest()
+                .body("유효하지 않은 사용자입니다.");
+    }
+
+    String userEmail = (jwt != null && jwt.hasClaim("email"))
+            ? jwt.getClaimAsString("email")
+            : null;
     
-    // preferred_username 추출 (email 또는 username)
-    String preferredUsername = (jwt != null && jwt.hasClaim("preferred_username"))
-            ? jwt.getClaimAsString("preferred_username")
-            : (jwt != null && jwt.hasClaim("email"))
-                ? jwt.getClaimAsString("email")
-                : null;
-    
-    LabCreateResponse response = labService.create(userId, preferredUsername, req);
-    return ResponseEntity.ok(response);
+    LabCreateResponse response = labService.create(kcUserId, userEmail, req);
+
+    return ResponseEntity.status(201).body(response);
     }
 
     @PostMapping("/destroy")
@@ -73,11 +80,25 @@ public class LabController {
     })
     public ResponseEntity<RunResponse> destroy(@RequestBody RunRequest req,
                                                @AuthenticationPrincipal Jwt jwt) {
-        String userId = (jwt != null && jwt.hasClaim("sub"))
+        String kcUserId = (jwt != null && jwt.hasClaim("sub"))
                 ? jwt.getClaimAsString("sub")
                 : null;
 
-        RunResponse response = labService.destroy(userId, req);
+        RunResponse response = labService.destroy(kcUserId, req);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{uuid}/complete")
+    @Operation(summary = "실습 완료", description = "실습을 완료하고 VM을 종료합니다. 마이페이지에 기록됩니다.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "실습 완료 성공"),
+            @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
+            @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
+    })
+    public ResponseEntity<LabTerminateResponse> completeSession(
+            @Parameter(description = "Lab 세션 UUID", required = true)
+            @PathVariable("uuid") String uuid) {
+        LabTerminateResponse response = labService.completeLabSession(uuid);
         return ResponseEntity.ok(response);
     }
 
@@ -90,8 +111,9 @@ public class LabController {
     })
     public ResponseEntity<LabRemainingTimeResponse> getRemainingTime(
             @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
-        LabRemainingTimeResponse response = labSessionService.getRemainingTime(uuid);
+            @PathVariable("uuid") String uuid) {
+        log.info("남은시간 현재시간----------------: {}", LocalDateTime.now());
+        LabRemainingTimeResponse response = labService.getRemainingTime(uuid);
         return ResponseEntity.ok(response);
     }
 
@@ -103,8 +125,8 @@ public class LabController {
     })
     public ResponseEntity<LabExtendableResponse> checkExtendable(
             @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
-        LabExtendableResponse response = labSessionService.isExtendable(uuid);
+            @PathVariable("uuid") String uuid) {
+        LabExtendableResponse response = labService.isExtendable(uuid);
         return ResponseEntity.ok(response);
     }
 
@@ -118,37 +140,8 @@ public class LabController {
     })
     public ResponseEntity<LabExtendResponse> extendSession(
             @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
-        LabExtendResponse response = labSessionService.extendLabSession(uuid);
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/{uuid}/terminate")
-    @Operation(summary = "VM 종료", description = "VM만 종료합니다. 보고서 작성은 가능하며 마이페이지에 표시되지 않습니다.")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "VM 종료 성공"),
-        @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
-        @ApiResponse(responseCode = "409", description = "이미 종료된 세션"),
-        @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
-    })
-    public ResponseEntity<LabTerminateResponse> terminateSession(
-            @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
-        LabTerminateResponse response = labSessionService.terminateLabSession(uuid);
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/{uuid}/complete")
-    @Operation(summary = "실습 완료", description = "실습을 완료하고 VM을 종료합니다. 마이페이지에 기록됩니다.")
-    @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "실습 완료 성공"),
-        @ApiResponse(responseCode = "404", description = "Lab 세션을 찾을 수 없음"),
-        @ApiResponse(responseCode = "500", description = "AWS EC2 종료 실패")
-    })
-    public ResponseEntity<LabTerminateResponse> completeSession(
-            @Parameter(description = "Lab 세션 UUID", required = true)
-            @PathVariable String uuid) {
-        LabTerminateResponse response = labSessionService.completeLabSession(uuid);
+            @PathVariable("uuid") String uuid) {
+        LabExtendResponse response = labService.extendLabSession(uuid);
         return ResponseEntity.ok(response);
     }
 

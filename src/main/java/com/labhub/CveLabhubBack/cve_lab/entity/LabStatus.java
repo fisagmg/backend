@@ -10,5 +10,3 @@ public enum LabStatus {
     TERMINATED   // VM 종료됨
 }
 
-
-

@@ -13,3 +13,4 @@ public interface LabRepository extends JpaRepository<Lab, String> {
     // 만료된 ACTIVE 상태의 Lab 세션 조회
     List<Lab> findAllByStatusAndExpiresAtBefore(LabStatus status, LocalDateTime now);
 }
+

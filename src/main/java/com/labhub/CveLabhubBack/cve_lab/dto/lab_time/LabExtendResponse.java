@@ -1,4 +1,4 @@
-package com.labhub.CveLabhubBack.cve_lab.dto.response;
+package com.labhub.CveLabhubBack.cve_lab.dto.lab_time;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;

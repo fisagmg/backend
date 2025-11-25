@@ -1,7 +1,8 @@
 package com.labhub.CveLabhubBack.cve_lab.client;
 
-import com.labhub.CveLabhubBack.cve_lab.dto.RunRequest;
-import com.labhub.CveLabhubBack.cve_lab.dto.RunResponse;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunRequest;
+import com.labhub.CveLabhubBack.cve_lab.dto.lab_run.RunResponse;
+import com.labhub.CveLabhubBack.cve_lab.exception.RunnerClientException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,6 +31,7 @@ public class RunnerClient {
     }
 
     public RunResponse destroy(RunRequest request) {
+        log.info("--------------------destroy--------------");
         return post("/api/labs/destroy", request);
     }
 
@@ -48,7 +50,6 @@ public class RunnerClient {
             if (body == null) {
                 throw new RunnerClientException("Runner returned empty response for path " + path);
             }
-
             log.info("Runner response received: uuid={}, status={}", body.uuid(), body.status());
             return body;
         } catch (RestClientException ex) {
