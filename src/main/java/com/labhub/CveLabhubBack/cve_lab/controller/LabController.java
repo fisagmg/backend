@@ -21,6 +21,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDateTime;
+
 @RestController
 @RequestMapping("/api/labs")
 @RequiredArgsConstructor
@@ -110,6 +112,7 @@ public class LabController {
     public ResponseEntity<LabRemainingTimeResponse> getRemainingTime(
             @Parameter(description = "Lab 세션 UUID", required = true)
             @PathVariable("uuid") String uuid) {
+        log.info("남은시간 현재시간----------------: {}", LocalDateTime.now());
         LabRemainingTimeResponse response = labService.getRemainingTime(uuid);
         return ResponseEntity.ok(response);
     }

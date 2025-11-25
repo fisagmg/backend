@@ -65,13 +65,6 @@ public class Lab {
     private Integer maxTtlMinutes = 120;
 
     /**
-     * TTL 만료 여부 확인
-     */
-    public boolean isExpired(LocalDateTime now) {
-        return expiresAt != null && expiresAt.isBefore(now);
-    }
-
-    /**
      * 종료 가능 여부 확인 (TERMINATED 상태는 종료 불가)
      */
     public boolean isTerminatable() {
@@ -89,4 +82,3 @@ public class Lab {
         this.terminatedAt = terminatedAt;
     }
 }
-

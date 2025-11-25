@@ -31,6 +31,7 @@ public class RunnerClient {
     }
 
     public RunResponse destroy(RunRequest request) {
+        log.info("--------------------destroy--------------");
         return post("/api/labs/destroy", request);
     }
 
@@ -49,7 +50,6 @@ public class RunnerClient {
             if (body == null) {
                 throw new RunnerClientException("Runner returned empty response for path " + path);
             }
-
             log.info("Runner response received: uuid={}, status={}", body.uuid(), body.status());
             return body;
         } catch (RestClientException ex) {

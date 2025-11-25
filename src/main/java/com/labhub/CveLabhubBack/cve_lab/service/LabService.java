@@ -290,6 +290,7 @@ public class LabService {
                 log.warn("User {} attempted to terminate lab {} owned by {}", user.getId(), lab.getUuid(), lab.getUser().getId());
             }
             // VM 종료 시 status를 TERMINATED로 변경하고 terminatedAt 설정
+            log.info("-------------------종료됨---------------------------------");
             LocalDateTime terminatedAt = parseDateTime(firstNonBlank(outputValue(response, "terminated_at"), null));
             if (terminatedAt == null) {
                 terminatedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
@@ -300,7 +301,6 @@ public class LabService {
         }, () -> log.warn("Lab with uuid {} not found during destroy handling.", response.uuid()));
     }
 
-
     private String outputValue(RunResponse response, String key) {
         if (response.outputs() == null) {
             return null;
@@ -308,7 +308,6 @@ public class LabService {
         RunResponse.RunnerOutput output = response.outputs().get(key);
         return output != null ? output.value() : null;
     }
-
 
     private String requiredOutputValue(RunResponse response, String key) {
         String value = outputValue(response, key);
@@ -469,4 +468,3 @@ public class LabService {
                 : labConfig.getMaxTtlMinutes();
     }
 }
-
