@@ -4,16 +4,23 @@ import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.core.annotation.Order;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
@@ -73,11 +80,68 @@ public class SecurityConfig {
                 ))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/news/**").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
-                .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()));
+                .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
 
         return http.build();
+    }
+
+    @Bean
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter scopeConverter = new JwtGrantedAuthoritiesConverter();
+        scopeConverter.setAuthorityPrefix("SCOPE_");
+
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            Collection<GrantedAuthority> authorities = new ArrayList<>();
+            Collection<GrantedAuthority> scopeAuthorities = scopeConverter.convert(jwt);
+            if (scopeAuthorities != null) {
+                authorities.addAll(scopeAuthorities);
+            }
+            authorities.addAll(extractRealmRoles(jwt));
+            authorities.addAll(extractResourceRoles(jwt));
+            return authorities;
+        });
+        return converter;
+    }
+
+    private Collection<? extends GrantedAuthority> extractRealmRoles(Jwt jwt) {
+        Map<String, Object> realmAccess = jwt.getClaim("realm_access");
+        if (realmAccess == null || !realmAccess.containsKey("roles")) {
+            return List.of();
+        }
+        @SuppressWarnings("unchecked")
+        List<String> roles = (List<String>) realmAccess.get("roles");
+        return roles.stream()
+                .map(this::toRoleAuthority)
+                .toList();
+    }
+
+    private Collection<? extends GrantedAuthority> extractResourceRoles(Jwt jwt) {
+        Map<String, Object> resourceAccess = jwt.getClaim("resource_access");
+        if (resourceAccess == null || resourceAccess.isEmpty()) {
+            return List.of();
+        }
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        for (Object client : resourceAccess.values()) {
+            if (client instanceof Map<?, ?> clientMap && clientMap.containsKey("roles")) {
+                Object rolesObj = clientMap.get("roles");
+                if (rolesObj instanceof List<?> roles) {
+                    roles.stream()
+                            .filter(String.class::isInstance)
+                            .map(String.class::cast)
+                            .map(this::toRoleAuthority)
+                            .forEach(authorities::add);
+                }
+            }
+        }
+        return authorities;
+    }
+
+    private GrantedAuthority toRoleAuthority(String role) {
+        return new SimpleGrantedAuthority("ROLE_" + role.toUpperCase());
     }
 
     public Long currentUserId(Jwt jwt, UserRepository usersRepo){
