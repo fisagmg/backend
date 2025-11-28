@@ -31,31 +31,31 @@ public class ReportService {
      */
     @Transactional
     public ReportResponse createReport(ReportCreateRequest request, Long userId) {
-        log.info("Creating new report for userId={}, cveId={}", userId, request.getCveId());
+        //log.info("Creating new report for userId={}, cveId={}", userId, request.getCveId());
         
         // 디버깅: Service에서 받은 request 값 확인
-        log.debug("🔍 [SERVICE] Received request - userId={}, cveId={}, name={}", 
+        //log.debug("🔍 [SERVICE] Received request - userId={}, cveId={}, name={}", 
                 userId, request.getCveId(), request.getName());
 
         // 같은 userId + cveId 조합의 보고서가 이미 있는지 확인
         List<Report> existingReports = reportRepository.findByCveIdAndUserId(request.getCveId(), userId);
         
-        log.debug("🔍 [SERVICE] Checking existing reports - found {} reports for userId={}, cveId={}", 
+        //log.debug("🔍 [SERVICE] Checking existing reports - found {} reports for userId={}, cveId={}", 
                 existingReports.size(), userId, request.getCveId());
         
         if (!existingReports.isEmpty()) {
             // 이미 존재하면 기존 보고서 반환
             Report existingReport = existingReports.get(0);
             String presignedUrl = s3StorageUtil.generatePresignedUrl(existingReport.getFileUrl());
-            log.info("Report already exists for userId={}, cveId={}, returning existing report id={}", 
+            //log.info("Report already exists for userId={}, cveId={}, returning existing report id={}", 
                     userId, request.getCveId(), existingReport.getId());
-            log.debug("🔍 [SERVICE] Returning existing report - reportId={}, userId={}, cveId={}", 
+            //log.debug("🔍 [SERVICE] Returning existing report - reportId={}, userId={}, cveId={}", 
                     existingReport.getId(), existingReport.getUserId(), existingReport.getCveId());
             return ReportResponse.fromEntityWithPresignedUrl(existingReport, presignedUrl);
         }
 
         // S3에서 템플릿 복제
-        log.debug("🔍 [SERVICE] Copying template to S3 - userId={}, cveId={}", 
+        //log.debug("🔍 [SERVICE] Copying template to S3 - userId={}, cveId={}", 
                 userId, request.getCveId());
         String s3Key = s3StorageUtil.copyTemplateToNewReport(userId, request.getCveId());
 
@@ -69,18 +69,18 @@ public class ReportService {
                 .version(1)
                 .build();
 
-        log.debug("🔍 [SERVICE] Saving report to DB - userId={}, cveId={}, name={}, fileUrl={}", 
+        //log.debug("🔍 [SERVICE] Saving report to DB - userId={}, cveId={}, name={}, fileUrl={}", 
                 report.getUserId(), report.getCveId(), report.getName(), report.getFileUrl());
         
         Report savedReport = reportRepository.save(report);
         
-        log.debug("🔍 [SERVICE] Report saved - reportId={}, userId={}, cveId={}", 
+        //log.debug("🔍 [SERVICE] Report saved - reportId={}, userId={}, cveId={}", 
                 savedReport.getId(), savedReport.getUserId(), savedReport.getCveId());
 
         // Presigned URL 생성
         String presignedUrl = s3StorageUtil.generatePresignedUrl(s3Key);
 
-        log.info("Report created successfully with id={}, userId={}", savedReport.getId(), savedReport.getUserId());
+        //log.info("Report created successfully with id={}, userId={}", savedReport.getId(), savedReport.getUserId());
         return ReportResponse.fromEntityWithPresignedUrl(savedReport, presignedUrl);
     }
 
@@ -91,7 +91,7 @@ public class ReportService {
      */
     @Transactional
     public ReportUploadResponse uploadReportFile(Long reportId, Long userId, MultipartFile file) {
-        log.info("Uploading file for reportId={}, userId={} (overwrite mode)", reportId, userId);
+        //log.info("Uploading file for reportId={}, userId={} (overwrite mode)", reportId, userId);
 
         // 보고서 조회
         Report report = reportRepository.findByIdAndUserId(reportId, userId)
@@ -112,7 +112,7 @@ public class ReportService {
         // DB updated_at 갱신 (JPA @PreUpdate로 자동 처리)
         Report updatedReport = reportRepository.save(report);
 
-        log.info("Report file uploaded successfully (overwrite). S3 Key: {}", s3Key);
+        //log.info("Report file uploaded successfully (overwrite). S3 Key: {}", s3Key);
 
         return ReportUploadResponse.builder()
                 .reportId(updatedReport.getId())
@@ -127,7 +127,7 @@ public class ReportService {
      * GET /api/reports/me
      */
     public List<ReportResponse> getMyReports(Long userId) {
-        log.info("Fetching reports for userId={}", userId);
+        //log.info("Fetching reports for userId={}", userId);
 
         List<Report> reports = reportRepository.findActiveReportsByUserId(userId);
 
@@ -141,7 +141,7 @@ public class ReportService {
      * GET /api/reports/{id}/download
      */
     public PresignedUrlResponse downloadReport(Long reportId, Long userId) {
-        log.info("Generating download URL for reportId={}, userId={}", reportId, userId);
+        //log.info("Generating download URL for reportId={}, userId={}", reportId, userId);
 
         Report report = reportRepository.findByIdAndUserId(reportId, userId)
                 .orElseThrow(() -> new ReportNotFoundException(reportId));
@@ -161,7 +161,7 @@ public class ReportService {
      */
     @Transactional
     public void deleteReport(Long reportId, Long userId) {
-        log.info("Deleting report reportId={}, userId={}", reportId, userId);
+        //log.info("Deleting report reportId={}, userId={}", reportId, userId);
 
         Report report = reportRepository.findByIdAndUserId(reportId, userId)
                 .orElseThrow(() -> new ReportNotFoundException(reportId));
@@ -169,7 +169,7 @@ public class ReportService {
         // S3 파일 삭제
         try {
             s3StorageUtil.deleteFile(report.getFileUrl());
-            log.info("S3 file deleted successfully: {}", report.getFileUrl());
+            //log.info("S3 file deleted successfully: {}", report.getFileUrl());
         } catch (Exception e) {
             log.error("Failed to delete S3 file: {}", report.getFileUrl(), e);
             // S3 삭제 실패해도 DB는 삭제 진행 (선택사항)
@@ -180,14 +180,14 @@ public class ReportService {
         reportRepository.delete(report);
         reportRepository.flush();
 
-        log.info("Report deleted successfully (DB soft delete + S3 hard delete). reportId={}", reportId);
+        //log.info("Report deleted successfully (DB soft delete + S3 hard delete). reportId={}", reportId);
     }
 
     /**
      * 보고서 상세 조회
      */
     public ReportResponse getReportById(Long reportId, Long userId) {
-        log.info("Fetching report detail for reportId={}, userId={}", reportId, userId);
+        //log.info("Fetching report detail for reportId={}, userId={}", reportId, userId);
 
         Report report = reportRepository.findByIdAndUserId(reportId, userId)
                 .orElseThrow(() -> new ReportNotFoundException(reportId));
@@ -199,7 +199,7 @@ public class ReportService {
      * CVE ID로 보고서 조회
      */
     public List<ReportResponse> getReportsByCveId(String cveId, Long userId) {
-        log.info("Fetching reports for cveId={}, userId={}", cveId, userId);
+        //log.info("Fetching reports for cveId={}, userId={}", cveId, userId);
 
         List<Report> reports = reportRepository.findByCveIdAndUserId(cveId, userId);
 
