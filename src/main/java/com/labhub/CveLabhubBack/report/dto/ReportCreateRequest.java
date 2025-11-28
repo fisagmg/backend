@@ -10,9 +10,6 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class ReportCreateRequest {
-
-    @Schema(description = "사용자 ID", example = "1", required = true)
-    private Long userId;
     
     @Schema(description = "CVE ID", example = "CVE-2024-1234", required = true)
     private String cveId;
