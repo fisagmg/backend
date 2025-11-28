@@ -23,5 +23,7 @@ public interface LabRepository extends JpaRepository<Lab, String> {
 
     @EntityGraph(attributePaths = {"user", "cve"})
     Page<Lab> findAllByStatus(LabStatus status, Pageable pageable);
+
+    List<Lab> findAllByUser_Id(Long userId);
 }
 
