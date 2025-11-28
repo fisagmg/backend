@@ -11,6 +11,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
@@ -38,12 +40,15 @@ public class SecurityConfig {
     @Value("${cors.allow-credentials}")
     private boolean allowCredentials;
 
+    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
+    private String issuerUri;
+
     // 1. 인증 없이 접근 가능한 경로용 FilterChain (우선순위 높음)
     @Bean
     @Order(1)
     public SecurityFilterChain publicFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/v1/auth/**", "/actuator/**", "/public/**", "/error", "/api/news/**")
+                .securityMatcher("/api/v1/auth/**", "/actuator/**", "/public/**", "/error", "/api/news/**", "/api/v1/cve/**", "/swagger-ui/**", "/v3/api-docs/**")
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(req -> {
                     var c = new CorsConfiguration();
@@ -86,6 +91,11 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
 
         return http.build();
+    }
+
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        return NimbusJwtDecoder.withIssuerLocation(issuerUri).build();
     }
 
     @Bean
