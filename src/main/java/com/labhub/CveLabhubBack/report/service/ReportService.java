@@ -30,27 +30,38 @@ public class ReportService {
      * POST /api/reports
      */
     @Transactional
-    public ReportResponse createReport(ReportCreateRequest request) {
-        log.info("Creating new report for userId={}, cveId={}", request.getUserId(), request.getCveId());
+    public ReportResponse createReport(ReportCreateRequest request, Long userId) {
+        log.info("Creating new report for userId={}, cveId={}", userId, request.getCveId());
+        
+        // 디버깅: Service에서 받은 request 값 확인
+        log.debug("🔍 [SERVICE] Received request - userId={}, cveId={}, name={}", 
+                userId, request.getCveId(), request.getName());
 
         // 같은 userId + cveId 조합의 보고서가 이미 있는지 확인
-        List<Report> existingReports = reportRepository.findByCveIdAndUserId(request.getCveId(), request.getUserId());
+        List<Report> existingReports = reportRepository.findByCveIdAndUserId(request.getCveId(), userId);
+        
+        log.debug("🔍 [SERVICE] Checking existing reports - found {} reports for userId={}, cveId={}", 
+                existingReports.size(), userId, request.getCveId());
         
         if (!existingReports.isEmpty()) {
             // 이미 존재하면 기존 보고서 반환
             Report existingReport = existingReports.get(0);
             String presignedUrl = s3StorageUtil.generatePresignedUrl(existingReport.getFileUrl());
             log.info("Report already exists for userId={}, cveId={}, returning existing report id={}", 
-                    request.getUserId(), request.getCveId(), existingReport.getId());
+                    userId, request.getCveId(), existingReport.getId());
+            log.debug("🔍 [SERVICE] Returning existing report - reportId={}, userId={}, cveId={}", 
+                    existingReport.getId(), existingReport.getUserId(), existingReport.getCveId());
             return ReportResponse.fromEntityWithPresignedUrl(existingReport, presignedUrl);
         }
 
         // S3에서 템플릿 복제
-        String s3Key = s3StorageUtil.copyTemplateToNewReport(request.getUserId(), request.getCveId());
+        log.debug("🔍 [SERVICE] Copying template to S3 - userId={}, cveId={}", 
+                userId, request.getCveId());
+        String s3Key = s3StorageUtil.copyTemplateToNewReport(userId, request.getCveId());
 
         // DB에 저장
         Report report = Report.builder()
-                .userId(request.getUserId())
+                .userId(userId)
                 .cveId(request.getCveId())
                 .name(request.getName())
                 .fileUrl(s3Key)
@@ -58,12 +69,18 @@ public class ReportService {
                 .version(1)
                 .build();
 
+        log.debug("🔍 [SERVICE] Saving report to DB - userId={}, cveId={}, name={}, fileUrl={}", 
+                report.getUserId(), report.getCveId(), report.getName(), report.getFileUrl());
+        
         Report savedReport = reportRepository.save(report);
+        
+        log.debug("🔍 [SERVICE] Report saved - reportId={}, userId={}, cveId={}", 
+                savedReport.getId(), savedReport.getUserId(), savedReport.getCveId());
 
         // Presigned URL 생성
         String presignedUrl = s3StorageUtil.generatePresignedUrl(s3Key);
 
-        log.info("Report created successfully with id={}", savedReport.getId());
+        log.info("Report created successfully with id={}, userId={}", savedReport.getId(), savedReport.getUserId());
         return ReportResponse.fromEntityWithPresignedUrl(savedReport, presignedUrl);
     }
 
@@ -158,9 +175,10 @@ public class ReportService {
             // S3 삭제 실패해도 DB는 삭제 진행 (선택사항)
         }
 
-        // DB에서 Soft delete
-        report.softDelete();
-        reportRepository.save(report);
+        // 수정 후
+        // DB에서 Hard delete (실제 row 삭제)
+        reportRepository.delete(report);
+        reportRepository.flush();
 
         log.info("Report deleted successfully (DB soft delete + S3 hard delete). reportId={}", reportId);
     }

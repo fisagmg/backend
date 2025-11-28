@@ -1,5 +1,6 @@
 package com.labhub.CveLabhubBack.report.controller;
 
+import com.labhub.CveLabhubBack.auth.Repository.UserRepository;
 import com.labhub.CveLabhubBack.report.dto.*;
 import com.labhub.CveLabhubBack.report.service.ReportService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,6 +14,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -29,6 +32,30 @@ import java.util.Map;
 public class ReportController {
 
     private final ReportService reportService;
+    private final UserRepository userRepository;
+
+    /**
+     * JWT에서 userId 추출
+     */
+    private Long getUserIdFromJwt(Jwt jwt) {
+        if (jwt == null) {
+            throw new IllegalStateException("인증 정보가 없습니다.");
+        }
+        
+        String email = jwt.getClaimAsString("email");
+        if (email == null || email.isBlank()) {
+            email = jwt.getClaimAsString("preferred_username");
+        }
+        
+        final String finalEmail = email;
+        if (finalEmail == null || finalEmail.isBlank()) {
+            throw new IllegalStateException("JWT에서 이메일을 찾을 수 없습니다.");
+        }
+        
+        return userRepository.findByEmail(finalEmail)
+                .orElseThrow(() -> new IllegalStateException("등록되지 않은 사용자: " + finalEmail))
+                .getId();
+    }
 
     @Operation(summary = "보고서 생성", description = "템플릿을 복제하여 새로운 보고서를 생성합니다.")
     @ApiResponses(value = {
@@ -38,11 +65,18 @@ public class ReportController {
             @ApiResponse(responseCode = "500", description = "서버 오류")
     })
     @PostMapping
-    public ResponseEntity<ReportResponse> createReport(@RequestBody ReportCreateRequest request) {
-        log.info("POST /api/reports - Creating report for userId={}, cveId={}", 
-                request.getUserId(), request.getCveId());
+    public ResponseEntity<ReportResponse> createReport(
+            @RequestBody ReportCreateRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
         
-        ReportResponse response = reportService.createReport(request);
+        Long userId = getUserIdFromJwt(jwt);
+        log.info("POST /api/reports - Creating report for userId={}, cveId={}", 
+                userId, request.getCveId());
+        
+        log.debug("📥 [REPORT CREATE REQUEST] userId={}, cveId={}, name={}", 
+                userId, request.getCveId(), request.getName());
+        
+        ReportResponse response = reportService.createReport(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -58,9 +92,10 @@ public class ReportController {
     @PutMapping(value = "/{id}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ReportUploadResponse> uploadReportFile(
             @Parameter(description = "보고서 ID", required = true) @PathVariable("id") Long id,
-            @Parameter(description = "사용자 ID", required = true) @RequestParam("userId") Long userId,
-            @Parameter(description = "업로드할 .docx 파일", required = true) @RequestPart("file") MultipartFile file) {
+            @Parameter(description = "업로드할 .docx 파일", required = true) @RequestPart("file") MultipartFile file,
+            @AuthenticationPrincipal Jwt jwt) {
         
+        Long userId = getUserIdFromJwt(jwt);
         log.info("PUT /api/reports/{}/file - Uploading file for userId={}", id, userId);
         
         ReportUploadResponse response = reportService.uploadReportFile(id, userId, file);
@@ -75,7 +110,8 @@ public class ReportController {
     })
     @GetMapping("/me")
     public ResponseEntity<List<ReportResponse>> getMyReports(
-            @Parameter(description = "사용자 ID", required = true) @RequestParam("userId") Long userId) {
+            @AuthenticationPrincipal Jwt jwt) {
+        Long userId = getUserIdFromJwt(jwt);
         log.info("GET /api/reports/me - Fetching reports for userId={}", userId);
         
         List<ReportResponse> reports = reportService.getMyReports(userId);
@@ -93,8 +129,9 @@ public class ReportController {
     @GetMapping("/{id}/download")
     public ResponseEntity<PresignedUrlResponse> downloadReport(
             @Parameter(description = "보고서 ID", required = true) @PathVariable("id") Long id,
-            @Parameter(description = "사용자 ID", required = true) @RequestParam("userId") Long userId) {
+            @AuthenticationPrincipal Jwt jwt) {
         
+        Long userId = getUserIdFromJwt(jwt);
         log.info("GET /api/reports/{}/download - Generating download URL for userId={}", id, userId);
         
         PresignedUrlResponse response = reportService.downloadReport(id, userId);
@@ -112,8 +149,9 @@ public class ReportController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, String>> deleteReport(
             @Parameter(description = "보고서 ID", required = true) @PathVariable("id") Long id,
-            @Parameter(description = "사용자 ID", required = true) @RequestParam("userId") Long userId) {
+            @AuthenticationPrincipal Jwt jwt) {
         
+        Long userId = getUserIdFromJwt(jwt);
         log.info("DELETE /api/reports/{} - Deleting report for userId={}", id, userId);
         
         reportService.deleteReport(id, userId);
@@ -136,8 +174,9 @@ public class ReportController {
     @GetMapping("/{id}")
     public ResponseEntity<ReportResponse> getReportById(
             @Parameter(description = "보고서 ID", required = true) @PathVariable("id") Long id,
-            @Parameter(description = "사용자 ID", required = true) @RequestParam("userId") Long userId) {
+            @AuthenticationPrincipal Jwt jwt) {
         
+        Long userId = getUserIdFromJwt(jwt);
         log.info("GET /api/reports/{} - Fetching report detail for userId={}", id, userId);
         
         ReportResponse response = reportService.getReportById(id, userId);
@@ -153,8 +192,9 @@ public class ReportController {
     @GetMapping("/cve/{cveId}")
     public ResponseEntity<List<ReportResponse>> getReportsByCveId(
             @Parameter(description = "CVE ID (예: CVE-2024-1234)", required = true) @PathVariable("cveId") String cveId,
-            @Parameter(description = "사용자 ID", required = true) @RequestParam("userId") Long userId) {
+            @AuthenticationPrincipal Jwt jwt) {
         
+        Long userId = getUserIdFromJwt(jwt);
         log.info("GET /api/reports/cve/{} - Fetching reports for userId={}", cveId, userId);
         
         List<ReportResponse> reports = reportService.getReportsByCveId(cveId, userId);
