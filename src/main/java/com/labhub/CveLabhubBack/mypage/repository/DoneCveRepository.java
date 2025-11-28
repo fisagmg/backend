@@ -35,5 +35,12 @@ public interface DoneCveRepository extends JpaRepository<DoneCve, DoneCve.DoneCv
      * 사용자 ID로 완료한 CVE 개수 조회
      */
     long countByUserId(Long userId);
+
+    /**
+     * 사용자 삭제 시 완료한 CVE 데이터 일괄 삭제
+     *
+     * @return 삭제된 행 수
+     */
+    long deleteAllByUserId(Long userId);
 }
 

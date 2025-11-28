@@ -2,12 +2,15 @@ package com.labhub.CveLabhubBack.auth.controller;
 
 import com.labhub.CveLabhubBack.auth.dto.LoginRequestDto;
 import com.labhub.CveLabhubBack.auth.dto.RegisterRequestDto;
+import com.labhub.CveLabhubBack.auth.service.AccountWithdrawalService;
 import com.labhub.CveLabhubBack.auth.service.AuthFlowService;
 import com.labhub.CveLabhubBack.auth.service.EmailService;
 import com.labhub.CveLabhubBack.auth.service.OtpService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 
@@ -22,6 +25,7 @@ public class AuthFlowController {
     private final AuthFlowService authFlowService;
     private final OtpService otpService;
     private final EmailService emailService;
+    private final AccountWithdrawalService accountWithdrawalService;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequestDto request) {
@@ -101,5 +105,28 @@ public class AuthFlowController {
         if (!ok) return ResponseEntity.status(400).body(Map.of("status","INVALID"));
         otpService.consume(email); // 인증 성공 시 저장된 인증코드 데이터 삭제
         return ResponseEntity.ok(Map.of("status","OK"));
+    }
+
+    @DeleteMapping("/withdraw")
+    public ResponseEntity<?> withdraw(@AuthenticationPrincipal Jwt jwt) {
+        try {
+            accountWithdrawalService.withdraw(jwt);
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message", "회원 탈퇴가 완료되었습니다."
+            ));
+        } catch (IllegalArgumentException e) {
+            log.warn("[WITHDRAW] 유효하지 않은 요청: {}", e.getMessage());
+            return ResponseEntity.status(400).body(Map.of(
+                    "status", "ERROR",
+                    "message", e.getMessage()
+            ));
+        } catch (Exception e) {
+            log.error("[WITHDRAW] 회원 탈퇴 처리 중 오류 발생", e);
+            return ResponseEntity.status(500).body(Map.of(
+                    "status", "ERROR",
+                    "message", "회원 탈퇴 처리 중 오류가 발생했습니다."
+            ));
+        }
     }
 }

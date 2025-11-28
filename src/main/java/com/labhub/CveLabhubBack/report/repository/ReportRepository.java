@@ -29,5 +29,12 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
      */
     @Query("SELECT r FROM Report r WHERE r.cveId = :cveId AND r.userId = :userId AND r.status = 'active'")
     List<Report> findByCveIdAndUserId(@Param("cveId") String cveId, @Param("userId") Long userId);
+
+    /**
+     * 사용자 삭제 시 보고서 데이터 일괄 삭제 (soft delete 없이 완전 삭제)
+     *
+     * @return 삭제된 행 수
+     */
+    long deleteAllByUserId(Long userId);
 }
 

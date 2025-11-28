@@ -189,6 +189,26 @@ public class KeycloakAdminService {
         }
     }
 
+    public void deleteUser(String userId) {
+        String token = getServiceToken();
+        String url = BASE_URL + "/admin/realms/" + REALM + "/users/" + userId;
+
+        HttpHeaders h = new HttpHeaders();
+        h.setBearerAuth(token);
+
+        try {
+            rt.exchange(url, HttpMethod.DELETE, new HttpEntity<>(h), Void.class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 404) {
+                // 이미 삭제된 사용자라면 성공으로 간주
+                return;
+            }
+            throw new RuntimeException("Keycloak 사용자 삭제 실패: " + e.getStatusCode(), e);
+        } catch (Exception e) {
+            throw new RuntimeException("Keycloak 사용자 삭제 중 오류 발생: " + e.getMessage(), e);
+        }
+    }
+
     // 만약 null로 값이 들어오면 ""로 변경, JSON 구조 깨지는 위험 방지
     private String nullToEmpty(String v) { return v == null ? "" : v; }
 }

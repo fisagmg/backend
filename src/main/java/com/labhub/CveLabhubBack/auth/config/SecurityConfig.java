@@ -48,7 +48,18 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain publicFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/v1/auth/**", "/actuator/**", "/public/**", "/error", "/api/news/**", "/api/v1/cve/**", "/swagger-ui/**", "/v3/api-docs/**")
+                .securityMatcher(
+                        "/api/v1/auth/login",
+                        "/api/v1/auth/signup",
+                        "/api/v1/auth/otp/**",
+                        "/actuator/**",
+                        "/public/**",
+                        "/error",
+                        "/api/news/**",
+                        "/api/v1/cve/**",
+                        "/swagger-ui/**",
+                        "/v3/api-docs/**"
+                )
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(req -> {
                     var c = new CorsConfiguration();
