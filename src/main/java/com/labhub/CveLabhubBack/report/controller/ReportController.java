@@ -70,11 +70,6 @@ public class ReportController {
             @AuthenticationPrincipal Jwt jwt) {
         
         Long userId = getUserIdFromJwt(jwt);
-        //log.info("POST /api/reports - Creating report for userId={}, cveId={}", 
-                userId, request.getCveId());
-        
-        //log.debug("📥 [REPORT CREATE REQUEST] userId={}, cveId={}, name={}", 
-                userId, request.getCveId(), request.getName());
         
         ReportResponse response = reportService.createReport(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -96,7 +91,6 @@ public class ReportController {
             @AuthenticationPrincipal Jwt jwt) {
         
         Long userId = getUserIdFromJwt(jwt);
-        //log.info("PUT /api/reports/{}/file - Uploading file for userId={}", id, userId);
         
         ReportUploadResponse response = reportService.uploadReportFile(id, userId, file);
         return ResponseEntity.ok(response);
@@ -112,7 +106,6 @@ public class ReportController {
     public ResponseEntity<List<ReportResponse>> getMyReports(
             @AuthenticationPrincipal Jwt jwt) {
         Long userId = getUserIdFromJwt(jwt);
-        //log.info("GET /api/reports/me - Fetching reports for userId={}", userId);
         
         List<ReportResponse> reports = reportService.getMyReports(userId);
         return ResponseEntity.ok(reports);
@@ -132,7 +125,6 @@ public class ReportController {
             @AuthenticationPrincipal Jwt jwt) {
         
         Long userId = getUserIdFromJwt(jwt);
-        //log.info("GET /api/reports/{}/download - Generating download URL for userId={}", id, userId);
         
         PresignedUrlResponse response = reportService.downloadReport(id, userId);
         return ResponseEntity.ok(response);
@@ -152,7 +144,6 @@ public class ReportController {
             @AuthenticationPrincipal Jwt jwt) {
         
         Long userId = getUserIdFromJwt(jwt);
-        //log.info("DELETE /api/reports/{} - Deleting report for userId={}", id, userId);
         
         reportService.deleteReport(id, userId);
         
@@ -177,7 +168,6 @@ public class ReportController {
             @AuthenticationPrincipal Jwt jwt) {
         
         Long userId = getUserIdFromJwt(jwt);
-        //log.info("GET /api/reports/{} - Fetching report detail for userId={}", id, userId);
         
         ReportResponse response = reportService.getReportById(id, userId);
         return ResponseEntity.ok(response);
@@ -195,7 +185,6 @@ public class ReportController {
             @AuthenticationPrincipal Jwt jwt) {
         
         Long userId = getUserIdFromJwt(jwt);
-        //log.info("GET /api/reports/cve/{} - Fetching reports for userId={}", cveId, userId);
         
         List<ReportResponse> reports = reportService.getReportsByCveId(cveId, userId);
         return ResponseEntity.ok(reports);
