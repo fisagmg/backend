@@ -30,5 +30,10 @@ public interface DoneCveRepository extends JpaRepository<DoneCve, DoneCve.DoneCv
      * 사용자 ID와 CVE ID로 조회
      */
     Optional<DoneCve> findByUserIdAndCveId(Long userId, Integer cveId);
+    
+    /**
+     * 사용자 ID로 완료한 CVE 개수 조회
+     */
+    long countByUserId(Long userId);
 }
 
