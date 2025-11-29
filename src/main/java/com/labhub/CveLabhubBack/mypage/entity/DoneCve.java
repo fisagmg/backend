@@ -6,7 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.io.Serializable;
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "done_cve")
@@ -26,7 +26,7 @@ public class DoneCve {
     private Integer cveId;
 
     @Column(name = "finished_at", nullable = false)
-    private LocalDateTime finishedAt;
+    private Instant finishedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", insertable = false, updatable = false)

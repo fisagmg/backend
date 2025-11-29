@@ -6,7 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Getter
 @Builder
@@ -19,7 +19,7 @@ public class CompletedCveResponse {
     private Float cvssScore;        // CVSS 점수
     private String labOs;           // 실습 OS
     private String relatedDomain;    // 관련 도메인
-    private LocalDateTime completedAt; // 완료일 (finished_at)
+    private Instant completedAt; // 완료일 (finished_at)
 
     public static CompletedCveResponse fromEntity(DoneCve doneCve) {
         if (doneCve.getCve() == null) {
