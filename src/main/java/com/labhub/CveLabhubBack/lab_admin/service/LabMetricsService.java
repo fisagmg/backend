@@ -33,6 +33,7 @@ import software.amazon.awssdk.services.cloudwatchlogs.model.OutputLogEvent;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -41,16 +42,15 @@ import java.util.stream.Collectors;
 @Slf4j
 public class LabMetricsService {
 
-    private static final String METRIC_NAMESPACE = "CVELabHub/EC2";
     private static final int DEFAULT_PERIOD_SECONDS = 60;
     private static final Duration DEFAULT_RANGE = Duration.ofHours(1);
-    private static final List<String> LOG_STREAM_SUFFIXES = List.of("syslog", "auth", "cloud-init");
+    private static final List<String> LOG_STREAM_SUFFIXES = List.of("syslog", "auth", "docker");
     private static final int LOG_EVENT_LIMIT = 200;
 
     private enum MetricKey {
-        CPU("cpu", "cpu_usage_active"),
-        MEMORY("memory", "mem_used_percent"),
-        DISK("disk", "disk_used_percent");
+        CPU("cpu", "CPU_IDLE"),
+        MEMORY("memory", "MEMORY_USED"),
+        DISK("disk", "DISK_USED");
 
         private final String responseKey;
         private final String metricName;
@@ -65,8 +65,11 @@ public class LabMetricsService {
     private final CloudWatchClientProvider cloudWatchClientProvider;
     private final CloudWatchLogsClientProvider cloudWatchLogsClientProvider;
 
-    @Value("${aws.cloudwatch.logs.log-group:CVELabHub/EC2/Logs}")
-    private String logGroupName;
+    @Value("${aws.cloudwatch.logs.log-group:cvexpert}")
+    private String logGroupPrefix;
+
+    @Value("${aws.cloudwatch.metrics.namespace.prefix:cvexpert}")
+    private String namespacePrefix;
 
     @Transactional(readOnly = true)
     public LabMetricsResponse getLabMetrics(String labUuid, Duration range) {
@@ -75,22 +78,68 @@ public class LabMetricsService {
 
         CloudWatchClient client = cloudWatchClientProvider.getClient(lab.getRegion());
 
+        // CloudWatch는 UTC 시간을 사용하지만, 서울 지역의 시간대를 고려하여 조회
+        // Lab 생성 시간(UTC)을 서울 시간대로 변환하여 로깅 및 디버깅에 사용
+        ZoneId seoulZone = ZoneId.of("Asia/Seoul");
+        
+        // 현재 UTC 시간
         Instant end = Instant.now();
-        // Lab 생성 시간부터 현재까지의 모든 메트릭 조회 (최대 3일로 제한)
-        Instant labStartTime = lab.getCreatedAt().atZone(ZoneId.of("Asia/Seoul")).toInstant();
+        
+        // Lab 생성 시간(UTC) - 이미 UTC이므로 그대로 사용
+        Instant labStartTime = lab.getCreatedAt();
+        
+        // 최대 조회 범위: 현재로부터 3일 전
         Instant maxStartTime = end.minus(Duration.ofDays(3));
+        
+        // 시작 시간 결정: Lab 생성 시간과 3일 전 중 더 늦은 시간
         Instant start = labStartTime.isAfter(maxStartTime) ? labStartTime : maxStartTime;
         
         // 실제 조회된 시간 범위 계산 (분 단위)
         long actualRangeMinutes = Duration.between(start, end).toMinutes();
 
-        log.info("메트릭 조회 범위 - Lab: {}, Lab생성: {}, 조회시작: {}, 조회종료: {}, 범위: {}분", 
-                labUuid, lab.getCreatedAt(), start, end, actualRangeMinutes);
+        // 디버깅을 위한 시간 정보 로깅 (UTC와 서울 시간 모두 표시)
+        ZonedDateTime startSeoul = start.atZone(seoulZone);
+        ZonedDateTime endSeoul = end.atZone(seoulZone);
+        ZonedDateTime labCreatedSeoul = labStartTime.atZone(seoulZone);
+        
+        log.info("메트릭 조회 범위 - Lab: {}", labUuid);
+        log.info("  - Lab생성 시간: UTC={}, 서울={}", labStartTime, labCreatedSeoul);
+        log.info("  - 조회 시작 시간: UTC={}, 서울={}", start, startSeoul);
+        log.info("  - 조회 종료 시간: UTC={}, 서울={}", end, endSeoul);
+        log.info("  - 조회 범위: {}분 ({}시간)", actualRangeMinutes, actualRangeMinutes / 60.0);
+
+        // CVE ID 가져오기 (예: "CVE-2025-1302")
+        String cveId = lab.getCveName();
+        String instanceId = lab.getInstanceId();
+        
+        // CVE별 동적 namespace 생성: cvexpert/CVE-2025-1302 (EC2 제거)
+        String metricNamespace = buildNamespaceForLab(cveId);
+        log.info("메트릭 namespace: {} (Lab: {}, CVE: {})", metricNamespace, labUuid, cveId);
 
         // Get actual disk dimensions from CloudWatch
-        Map<String, String> actualDiskDimensions = getActualDiskDimensions(client, lab.getInstanceId());
+        Map<String, String> actualDiskDimensions = getActualDiskDimensions(client, lab.getInstanceId(), metricNamespace);
 
-        List<MetricDataQuery> queries = buildQueries(lab.getInstanceId(), actualDiskDimensions);
+        List<MetricDataQuery> queries = buildQueries(lab.getInstanceId(), actualDiskDimensions, metricNamespace);
+        
+        // CloudWatch 요청 상세 로그
+        log.info("CloudWatch 메트릭 요청 정보:");
+        log.info("  - Region: {} (서울: ap-northeast-2)", lab.getRegion());
+        log.info("  - InstanceId: {}", lab.getInstanceId());
+        log.info("  - Namespace: {}", metricNamespace);
+        log.info("  - StartTime: UTC={} (서울={})", start, startSeoul);
+        log.info("  - EndTime: UTC={} (서울={})", end, endSeoul);
+        log.info("  - TimeRange: {} minutes ({} hours)", actualRangeMinutes, String.format("%.2f", actualRangeMinutes / 60.0));
+        log.info("  - Query 개수: {}", queries.size());
+        for (MetricDataQuery query : queries) {
+            log.info("  - Query[{}]: namespace={}, metricName={}, dimensions={}, period={}s, stat={}",
+                    query.id(),
+                    query.metricStat().metric().namespace(),
+                    query.metricStat().metric().metricName(),
+                    query.metricStat().metric().dimensions(),
+                    query.metricStat().period(),
+                    query.metricStat().stat());
+        }
+        
         GetMetricDataResponse response;
         try {
             response = client.getMetricData(GetMetricDataRequest.builder()
@@ -98,6 +147,8 @@ public class LabMetricsService {
                     .endTime(end)
                     .metricDataQueries(queries)
                     .build());
+            
+            log.info("CloudWatch 응답 - 성공: metricDataResults 개수={}", response.metricDataResults().size());
         } catch (CloudWatchException ex) {
             String errorMessage = ex.awsErrorDetails() != null
                     ? ex.awsErrorDetails().errorMessage()
@@ -108,7 +159,7 @@ public class LabMetricsService {
         }
 
         Map<MetricKey, List<LabMetricPoint>> series = extractSeries(response);
-        List<LabLogStreamResponse> logs = fetchLogs(lab, start, end);
+        List<LabLogStreamResponse> logs = fetchLogs(lab, instanceId, start, end);
 
         String finalDiskPath = actualDiskDimensions.getOrDefault("path", "/");
         String finalDiskDevice = actualDiskDimensions.getOrDefault("device", "");
@@ -137,6 +188,29 @@ public class LabMetricsService {
         );
     }
 
+    /**
+     * CVE ID를 기반으로 CloudWatch 메트릭 namespace 생성
+     * 형식: cvexpert/CVE-2025-1302 (EC2 제거)
+     * 예: "CVE-2025-1302" → "cvexpert/CVE-2025-1302"
+     */
+    private String buildNamespaceForLab(String cveId) {
+        if (cveId == null || cveId.isBlank()) {
+            // CVE ID가 없는 경우 기본 prefix만 반환
+            return namespacePrefix;
+        }
+        // namespacePrefix + "/" + CVE ID (대소문자 그대로 유지)
+        return namespacePrefix + "/" + cveId;
+    }
+
+    /**
+     * Agent 설정에 맞춘 CloudWatch 로그 그룹 이름 생성
+     * Agent 설정: /aws/ec2/cve-lab/{instanceId}/{suffix}
+     * 형식: /aws/ec2/cve-lab/i-06f582c3.../syslog
+     */
+    private String buildLogGroupName(String instanceId, String suffix) {
+        return "/aws/ec2/cve-lab/" + instanceId + "/" + suffix;
+    }
+
     private Duration normalizeRange(Duration range) {
         if (range == null || range.isNegative() || range.isZero()) {
             return DEFAULT_RANGE;
@@ -147,12 +221,12 @@ public class LabMetricsService {
         return range;
     }
 
-    private Map<String, String> getActualDiskDimensions(CloudWatchClient client, String instanceId) {
+    private Map<String, String> getActualDiskDimensions(CloudWatchClient client, String instanceId, String metricNamespace) {
         Map<String, String> dimensions = new HashMap<>();
         try {
             var listMetricsResponse = client.listMetrics(builder -> builder
-                    .namespace(METRIC_NAMESPACE)
-                    .metricName("disk_used_percent")
+                    .namespace(metricNamespace)
+                    .metricName("DISK_USED")
                     .dimensions(DimensionFilter.builder()
                             .name("InstanceId")
                             .value(instanceId)
@@ -174,7 +248,7 @@ public class LabMetricsService {
                 }
                 log.debug("실제 디스크 dimension 조회 성공: {}", dimensions);
             } else {
-                log.warn("CloudWatch에서 disk_used_percent 메트릭을 찾을 수 없습니다. instanceId={}", instanceId);
+                log.warn("CloudWatch에서 DISK_USED 메트릭을 찾을 수 없습니다. instanceId={}", instanceId);
             }
         } catch (CloudWatchException ex) {
             log.warn("디스크 dimension 조회 실패, 기본값 사용: {}", ex.getMessage());
@@ -182,29 +256,29 @@ public class LabMetricsService {
         return dimensions;
     }
 
-    private List<MetricDataQuery> buildQueries(String instanceId, Map<String, String> diskDimensions) {
+    private List<MetricDataQuery> buildQueries(String instanceId, Map<String, String> diskDimensions, String metricNamespace) {
         List<MetricDataQuery> queries = new ArrayList<>();
         for (MetricKey key : MetricKey.values()) {
-            MetricDataQuery query = buildMetricDataQuery(key, instanceId, diskDimensions);
+            MetricDataQuery query = buildMetricDataQuery(key, instanceId, diskDimensions, metricNamespace);
             queries.add(query);
-            log.debug("메트릭 쿼리 생성 - 타입: {}, 메트릭: {}, Dimension 개수: {}", 
-                    key.responseKey, key.metricName, query.metricStat().metric().dimensions().size());
+            log.debug("메트릭 쿼리 생성 - 타입: {}, 메트릭: {}, Namespace: {}, Dimension 개수: {}", 
+                    key.responseKey, key.metricName, metricNamespace, query.metricStat().metric().dimensions().size());
         }
         return queries;
     }
 
-    private MetricDataQuery buildMetricDataQuery(MetricKey key, String instanceId, Map<String, String> diskDimensions) {
+    private MetricDataQuery buildMetricDataQuery(MetricKey key, String instanceId, Map<String, String> diskDimensions, String metricNamespace) {
         List<Dimension> dimensions = new ArrayList<>();
         dimensions.add(Dimension.builder()
                 .name("InstanceId")
                 .value(instanceId)
                 .build());
 
+        // CPU_IDLE 메트릭은 추가 dimension이 필요하지 않을 수 있음
+        // 실제 CloudWatch 메트릭 구조에 맞게 조정 필요
         if (key == MetricKey.CPU) {
-            dimensions.add(Dimension.builder()
-                    .name("cpu")
-                    .value("cpu-total")
-                    .build());
+            // CPU_IDLE 메트릭은 일반적으로 추가 dimension이 없거나 다른 형식일 수 있음
+            // CloudWatch에서 실제 확인 필요
         }
         if (key == MetricKey.DISK) {
             // Use actual dimensions from CloudWatch
@@ -236,7 +310,7 @@ public class LabMetricsService {
                 .id(key.responseKey)
                 .metricStat(MetricStat.builder()
                         .metric(Metric.builder()
-                                .namespace(METRIC_NAMESPACE)
+                                .namespace(metricNamespace)
                                 .metricName(key.metricName)
                                 .dimensions(dimensions)
                                 .build())
@@ -250,19 +324,33 @@ public class LabMetricsService {
     private Map<MetricKey, List<LabMetricPoint>> extractSeries(GetMetricDataResponse response) {
         Map<MetricKey, List<LabMetricPoint>> series = new EnumMap<>(MetricKey.class);
 
-        log.debug("CloudWatch 메트릭 응답 - 결과 개수: {}", response.metricDataResults().size());
+        log.info("CloudWatch 메트릭 응답 처리 - 결과 개수: {}", response.metricDataResults().size());
 
         for (MetricDataResult result : response.metricDataResults()) {
             MetricKey key = resolveMetricKey(result.id());
             if (key == null) {
-                log.debug("지원되지 않는 MetricDataResult id: {}", result.id());
+                log.warn("지원되지 않는 MetricDataResult id: {} (statusCode: {}, messages: {})", 
+                        result.id(), result.statusCode(), result.messages());
                 continue;
             }
+            
+            // CloudWatch 응답 상태 확인
+            if (result.statusCode() != null && !result.statusCode().equals("Complete")) {
+                log.warn("{} 메트릭 응답 상태: {} - 메시지: {}", 
+                        key.responseKey, result.statusCode(), result.messages());
+            }
+            
             List<LabMetricPoint> points = new ArrayList<>();
             List<Instant> timestamps = result.timestamps();
             List<Double> values = result.values();
             
-            log.debug("{} 메트릭 - 데이터 포인트 개수: {}", key.responseKey, timestamps.size());
+            log.info("{} 메트릭 - 데이터 포인트 개수: {}, statusCode: {}", 
+                    key.responseKey, timestamps.size(), result.statusCode());
+            
+            if (timestamps.isEmpty() && values.isEmpty()) {
+                log.warn("{} 메트릭에 데이터가 없습니다. (Label: {}, Messages: {})", 
+                        key.responseKey, result.label(), result.messages());
+            }
             
             for (int i = 0; i < Math.min(timestamps.size(), values.size()); i++) {
                 points.add(new LabMetricPoint(timestamps.get(i), values.get(i)));
@@ -283,16 +371,20 @@ public class LabMetricsService {
         return null;
     }
 
-    private List<LabLogStreamResponse> fetchLogs(Lab lab, Instant start, Instant end) {
+    private List<LabLogStreamResponse> fetchLogs(Lab lab, String instanceId, Instant start, Instant end) {
         CloudWatchLogsClient client = cloudWatchLogsClientProvider.getClient(lab.getRegion());
         List<LabLogStreamResponse> streams = new ArrayList<>();
 
         for (String suffix : LOG_STREAM_SUFFIXES) {
-            String streamName = lab.getInstanceId() + "/" + suffix;
+            // Agent 설정에 맞춘 로그 그룹: /aws/ec2/cve-lab/{instanceId}/{suffix}
+            String logGroup = buildLogGroupName(instanceId, suffix);
+            // Agent 설정에 맞춘 로그 스트림: {instanceId} (suffix 없음)
+            String logStream = instanceId;
+            
             try {
                 GetLogEventsResponse response = client.getLogEvents(GetLogEventsRequest.builder()
-                        .logGroupName(logGroupName)
-                        .logStreamName(streamName)
+                        .logGroupName(logGroup)
+                        .logStreamName(logStream)
                         .startTime(start.toEpochMilli())
                         .endTime(end.toEpochMilli())
                         .limit(LOG_EVENT_LIMIT)
@@ -304,19 +396,21 @@ public class LabMetricsService {
                         .collect(Collectors.toList());
 
                 streams.add(new LabLogStreamResponse(
-                        logGroupName,
-                        streamName,
+                        logGroup,
+                        logStream,
                         events
                 ));
+                
+                log.info("로그 조회 성공 - logGroup: {}, logStream: {}, events: {}개", logGroup, logStream, events.size());
             } catch (CloudWatchLogsException ex) {
                 String reason = ex.awsErrorDetails() != null
                         ? ex.awsErrorDetails().errorMessage()
                         : ex.getMessage();
-                log.warn("CloudWatch 로그 조회 실패 - labUuid={}, stream={}, reason={}",
-                        lab.getUuid(), streamName, reason);
+                log.warn("CloudWatch 로그 조회 실패 - labUuid={}, logGroup={}, logStream={}, reason={}",
+                        lab.getUuid(), logGroup, logStream, reason);
                 streams.add(new LabLogStreamResponse(
-                        logGroupName,
-                        streamName,
+                        logGroup,
+                        logStream,
                         List.of()
                 ));
             }

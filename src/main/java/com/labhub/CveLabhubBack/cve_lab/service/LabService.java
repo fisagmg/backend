@@ -29,13 +29,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.PostConstruct;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
+
+import java.time.*;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.UUID;
-import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -156,7 +154,7 @@ public class LabService {
         }
 
         Long userId = lab.getUser().getId();
-        LocalDateTime finishedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+        Instant finishedAt = Instant.now();
 
         boolean vmTerminated = false;
         if (lab.getStatus() == LabStatus.ACTIVE) {
@@ -260,18 +258,16 @@ public class LabService {
         lab.setCveName(firstNonBlank(outputValue(response, "cve_id"), response.cveName()));
         lab.setInstanceId(requiredOutputValue(response, "instance_id"));
         lab.setRegion(requiredOutputValue(response, "region"));
-        lab.setCreatedAt(parseDateTime(requiredOutputValue(response, "created_at")));
+        Instant createdAt = parseDateTime(requiredOutputValue(response, "created_at"));
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
+        lab.setCreatedAt(createdAt);
 
         // expires_at 설정 - 항상 application.properties의 설정값 사용
         // Terraform 응답의 expires_at은 무시하고 일관된 시간 정책 적용
-        LocalDateTime createdAt = lab.getCreatedAt();
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
-            lab.setCreatedAt(createdAt);
-        }
-
         // application.properties의 lab.initial-ttl-minutes 설정값을 항상 사용
-        LocalDateTime expiresAt = createdAt.plusMinutes(labConfig.getInitialTtlMinutes());
+        Instant expiresAt = createdAt.plusSeconds(labConfig.getInitialTtlMinutes() * 60L);
         log.info("Setting expires_at using initial TTL from config: {} minutes (createdAt: {}, expiresAt: {})",
                 labConfig.getInitialTtlMinutes(), createdAt, expiresAt);
 
@@ -291,9 +287,9 @@ public class LabService {
             }
             // VM 종료 시 status를 TERMINATED로 변경하고 terminatedAt 설정
             log.info("-------------------종료됨---------------------------------");
-            LocalDateTime terminatedAt = parseDateTime(firstNonBlank(outputValue(response, "terminated_at"), null));
+            Instant terminatedAt = parseDateTime(firstNonBlank(outputValue(response, "terminated_at"), null));
             if (terminatedAt == null) {
-                terminatedAt = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+                terminatedAt = Instant.now();
             }
             lab.terminate(terminatedAt);
             labRepository.save(lab);
@@ -318,14 +314,14 @@ public class LabService {
     }
 
 
-    // DateTime region Asia/Seoul로 변환
-    private LocalDateTime parseDateTime(String isoDateTime) {
+    // DateTime을 Instant로 변환 (UTC)
+    private Instant parseDateTime(String isoDateTime) {
         if (isoDateTime == null || isoDateTime.isBlank()) {
             return null;
         }
         try {
             OffsetDateTime offsetDateTime = OffsetDateTime.parse(isoDateTime);
-            return offsetDateTime.atZoneSameInstant(ZoneId.of("Asia/Seoul")).toLocalDateTime();
+            return offsetDateTime.toInstant();
         } catch (DateTimeParseException ex) {
             log.warn("Failed to parse datetime '{}': {}", isoDateTime, ex.getMessage());
             return null;
@@ -362,8 +358,8 @@ public class LabService {
 
         long remainingMinutes = calculateRemainingMinutes(lab);
 
-        LocalDateTime potentialExpiresAt = lab.getExpiresAt().plusMinutes(labConfig.getExtendUnitMinutes());
-        LocalDateTime maxAllowedTime = lab.getCreatedAt().plusMinutes(getMaxTtlMinutes(lab));
+        Instant potentialExpiresAt = lab.getExpiresAt().plusSeconds(labConfig.getExtendUnitMinutes() * 60L);
+        Instant maxAllowedTime = lab.getCreatedAt().plusSeconds(getMaxTtlMinutes(lab) * 60L);
 
         boolean extendable = !potentialExpiresAt.isAfter(maxAllowedTime);
 
@@ -380,8 +376,8 @@ public class LabService {
         Lab lab = findLabByUuid(uuid);
         validateActive(lab);
 
-        LocalDateTime potentialExpiresAt = lab.getExpiresAt().plusMinutes(labConfig.getExtendUnitMinutes());
-        LocalDateTime maxAllowedTime = lab.getCreatedAt().plusMinutes(getMaxTtlMinutes(lab));
+        Instant potentialExpiresAt = lab.getExpiresAt().plusSeconds(labConfig.getExtendUnitMinutes() * 60L);
+        Instant maxAllowedTime = lab.getCreatedAt().plusSeconds(getMaxTtlMinutes(lab) * 60L);
 
         if (potentialExpiresAt.isAfter(maxAllowedTime)) {
             throw new LabExtensionNotAllowedException(
@@ -400,7 +396,7 @@ public class LabService {
     /** 만료된 세션 자동 종료 */
     @Transactional
     public void terminateExpiredSessions() {
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+        Instant now = Instant.now();
         List<Lab> expiredLabs =
                 labRepository.findAllByStatusAndExpiresAtBefore(LabStatus.ACTIVE, now);
 
@@ -456,7 +452,7 @@ public class LabService {
     private long calculateRemainingMinutes(Lab lab) {
         if (lab.getExpiresAt() == null) return 0;
 
-        LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
+        Instant now = Instant.now();
         Duration duration = Duration.between(now, lab.getExpiresAt());
 
         return Math.max(0, duration.toMinutes());

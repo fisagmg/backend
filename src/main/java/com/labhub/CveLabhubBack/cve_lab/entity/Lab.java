@@ -14,7 +14,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Getter
 @Setter
@@ -53,13 +53,13 @@ public class Lab {
     private String region;
 
     @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
+    private Instant createdAt;
 
     @Column(name = "expires_at")
-    private LocalDateTime expiresAt;
+    private Instant expiresAt;
 
     @Column(name = "terminated_at")
-    private LocalDateTime terminatedAt;
+    private Instant terminatedAt;
 
     @Column(name = "max_ttl_minutes")
     private Integer maxTtlMinutes = 120;
@@ -74,7 +74,7 @@ public class Lab {
     /**
      * VM 종료 처리
      */
-    public void terminate(LocalDateTime terminatedAt) {
+    public void terminate(Instant terminatedAt) {
         if (!isTerminatable()) {
             throw new IllegalStateException("Lab is already terminated: " + uuid);
         }

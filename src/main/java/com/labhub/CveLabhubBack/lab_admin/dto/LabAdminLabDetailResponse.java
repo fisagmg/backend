@@ -1,6 +1,6 @@
 package com.labhub.CveLabhubBack.lab_admin.dto;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 public record LabAdminLabDetailResponse(
         String labUuid,
@@ -9,9 +9,9 @@ public record LabAdminLabDetailResponse(
         String instanceId,
         String region,
         String status,
-        LocalDateTime createdAt,
-        LocalDateTime expiresAt,
-        LocalDateTime terminatedAt,
+        Instant createdAt,
+        Instant expiresAt,
+        Instant terminatedAt,
         Integer maxTtlMinutes,
         Long ttlRemainingSeconds,
         Long ttlRemainingMinutes,

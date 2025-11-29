@@ -13,8 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,8 +21,6 @@ import java.util.Optional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class LabAdminService {
-
-    private static final ZoneId ASIA_SEOUL = ZoneId.of("Asia/Seoul");
 
     private final LabRepository labRepository;
 
@@ -99,7 +96,7 @@ public class LabAdminService {
         if (lab.getStatus() == LabStatus.TERMINATED || lab.getExpiresAt() == null) {
             return Duration.ZERO;
         }
-        LocalDateTime now = LocalDateTime.now(ASIA_SEOUL);
+        Instant now = Instant.now();
         Duration duration = Duration.between(now, lab.getExpiresAt());
         if (duration.isNegative()) {
             return Duration.ZERO;

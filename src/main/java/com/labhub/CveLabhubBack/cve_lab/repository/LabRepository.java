@@ -7,7 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,7 +16,7 @@ public interface LabRepository extends JpaRepository<Lab, String> {
     Optional<Lab> findByUuid(String uuid);
 
     // 만료된 ACTIVE 상태의 Lab 세션 조회
-    List<Lab> findAllByStatusAndExpiresAtBefore(LabStatus status, LocalDateTime now);
+    List<Lab> findAllByStatusAndExpiresAtBefore(LabStatus status, Instant now);
 
     @EntityGraph(attributePaths = {"user", "cve"})
     Page<Lab> findAll(Pageable pageable);
