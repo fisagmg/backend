@@ -48,7 +48,7 @@ public class LabMetricsService {
     private static final int LOG_EVENT_LIMIT = 200;
 
     private enum MetricKey {
-        CPU("cpu", "CPU_IDLE"),
+        CPU("cpu", "CPU_USAGE"),
         MEMORY("memory", "MEMORY_USED"),
         DISK("disk", "DISK_USED");
 
